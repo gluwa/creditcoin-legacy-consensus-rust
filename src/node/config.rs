@@ -1,8 +1,6 @@
-use sawtooth_sdk::consensus::engine::BlockId;
-use sawtooth_sdk::consensus::engine::Error;
+use sawtooth_sdk::consensus::engine::{BlockId, Error};
 use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 use crate::node::PowService;
 
@@ -23,12 +21,6 @@ pub struct PowConfig {
 
 impl Default for PowConfig {
   fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl PowConfig {
-  pub fn new() -> Self {
     Self {
       initial_difficulty: INITIAL_DIFFICULTY,
       seconds_between_blocks: SECONDS_BETWEEN_BLOCKS,
@@ -36,6 +28,12 @@ impl PowConfig {
       difficulty_tuning_block_count: DIFFICULTY_TUNING_BLOCK_COUNT,
       update_recv_timeout: UPDATE_RECV_TIMEOUT,
     }
+  }
+}
+
+impl PowConfig  {
+  pub fn new() -> Self {
+    Self::default()
   }
 
   pub fn load(&mut self, service: &PowService, block_id: BlockId) -> Result<(), Error> {
