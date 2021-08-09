@@ -69,7 +69,7 @@ impl Worker {
 
         debug!("Received challenge: {:?}", challenge);
 
-        let mut nonce: u64 = rng.gen_range(0, u64::MAX);
+        let mut nonce: u64 = rng.gen_range(0..u64::MAX);
 
         'inner: loop {
           mkhash_into(
@@ -90,7 +90,7 @@ impl Worker {
               debug!("Received update: {:?}", update);
 
               challenge = update;
-              nonce = rng.gen_range(0, u64::MAX);
+              nonce = rng.gen_range(0..u64::MAX);
             }
             Some(Message::Shutdown) => {
               break 'outer;
