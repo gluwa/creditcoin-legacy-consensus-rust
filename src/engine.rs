@@ -11,7 +11,7 @@ use crate::node::PowConfig;
 use crate::node::PowNode;
 
 const ENGINE_NAME: &str = "PoW";
-const ENGINE_VERSION: &str = "0.1";
+const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Default)]
 #[repr(transparent)]
@@ -81,7 +81,8 @@ impl Engine for PowEngine {
   }
 
   fn version(&self) -> String {
-    ENGINE_VERSION.to_string()
+    let idx = ENGINE_VERSION.rfind(".").expect("PATCH");
+    ENGINE_VERSION[0..idx].into()
   }
 
   fn additional_protocols(&self) -> Vec<(String, String)> {
