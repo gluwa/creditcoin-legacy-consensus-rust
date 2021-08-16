@@ -1,6 +1,6 @@
+use crate::block::Block;
+use crate::block::BlockId;
 use anyhow::Result;
-use sawtooth_sdk::consensus::engine::Block;
-use sawtooth_sdk::consensus::engine::BlockId;
 use sha2::Digest;
 use sha2::Sha256;
 use std::borrow::Cow;
@@ -9,7 +9,7 @@ use crate::block::BlockConsensus;
 use crate::block::BlockHeader;
 use crate::node::PowConfig;
 use crate::node::PowService;
-use crate::primitives::H256;
+use crate::primitives::{CCDifficulty, CCNonce, CCTimestamp, H256};
 
 pub type Hasher = Sha256;
 
@@ -17,7 +17,7 @@ pub fn get_hasher() -> Hasher {
   Sha256::new()
 }
 
-pub fn mkhash(hasher: &mut Hasher, block_id: &[u8], peer_id: &[u8], nonce: u64) -> H256 {
+pub fn mkhash(hasher: &mut Hasher, block_id: &[u8], peer_id: &[u8], nonce: CCNonce) -> H256 {
   let mut output: H256 = H256::new();
 
   mkhash_into(hasher, &mut output, block_id, peer_id, nonce);
@@ -30,7 +30,7 @@ pub fn mkhash_into(
   output: &mut H256,
   block_id: &[u8],
   peer_id: &[u8],
-  nonce: u64,
+  nonce: CCNonce,
 ) {
   hasher.update(block_id);
   hasher.update(peer_id);
@@ -38,29 +38,28 @@ pub fn mkhash_into(
   output.copy_from_slice(&*hasher.finalize_reset());
 }
 
-pub fn is_valid_proof_of_work(hash: &H256, difficulty: u32) -> bool {
+pub fn is_valid_proof_of_work(hash: &H256, difficulty: CCDifficulty) -> bool {
   digest_score(hash) >= difficulty
 }
 
 pub fn get_difficulty(
   header: &BlockHeader,
-  timestamp: f64,
-  service: &PowService,
+  timestamp: CCTimestamp,
+  service: &mut PowService,
   config: &PowConfig,
-) -> u32 {
+) -> CCDifficulty {
   if header.is_genesis() {
     return config.initial_difficulty;
   }
-
   calculate_difficulty(header, timestamp, service, config).unwrap_or(config.initial_difficulty)
 }
 
 fn calculate_difficulty(
   header: &BlockHeader,
-  timestamp: f64,
-  service: &PowService,
+  timestamp: CCTimestamp,
+  service: &mut PowService,
   config: &PowConfig,
-) -> Result<u32> {
+) -> Result<CCDifficulty> {
   if is_tuning_block(header, config) {
     if let Some(difficulty) = calculate_tuning_difficulty(header, timestamp, service, config)? {
       return Ok(difficulty);
@@ -76,10 +75,10 @@ fn calculate_difficulty(
 
 fn calculate_tuning_difficulty(
   header: &BlockHeader,
-  timestamp: f64,
-  service: &PowService,
+  timestamp: CCTimestamp,
+  service: &mut PowService,
   config: &PowConfig,
-) -> Result<Option<u32>> {
+) -> Result<Option<CCDifficulty>> {
   let (time_taken, time_expected) = elapsed_time(
     header,
     service,
@@ -101,10 +100,10 @@ fn calculate_tuning_difficulty(
 
 fn calculate_adjustment_difficulty(
   header: &BlockHeader,
-  timestamp: f64,
-  service: &PowService,
+  timestamp: CCTimestamp,
+  service: &mut PowService,
   config: &PowConfig,
-) -> Result<Option<u32>> {
+) -> Result<Option<CCDifficulty>> {
   let (time_taken, time_expected) = elapsed_time(
     header,
     service,
@@ -134,8 +133,8 @@ fn is_adjustment_block(header: &BlockHeader, config: &PowConfig) -> bool {
 
 fn elapsed_time(
   header: &BlockHeader,
-  service: &PowService,
-  current_time: f64,
+  service: &mut PowService,
+  current_time: CCTimestamp,
   total_count: u64,
   expected_interval: u64,
 ) -> Result<(f64, f64)> {

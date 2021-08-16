@@ -5,15 +5,10 @@ use rand::Rng;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 
-use crate::miner::Answer;
-use crate::miner::Challenge;
-use crate::miner::Channel;
+use crate::miner::{Answer, Challenge, Channel};
 use crate::primitives::H256;
 use crate::utils::to_hex;
-use crate::work::get_hasher;
-use crate::work::is_valid_proof_of_work;
-use crate::work::mkhash_into;
-use crate::work::Hasher;
+use crate::work::{get_hasher, is_valid_proof_of_work, Hasher, mkhash_into};
 
 type Parent = Channel<Message, Answer>;
 type Child = Channel<Answer, Message>;

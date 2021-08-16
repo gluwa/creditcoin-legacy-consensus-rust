@@ -1,9 +1,8 @@
 use anyhow::Result;
-use sawtooth_sdk::consensus::engine::Engine;
-use sawtooth_sdk::consensus::engine::Error;
-use sawtooth_sdk::consensus::engine::StartupState;
-use sawtooth_sdk::consensus::engine::Update;
-use sawtooth_sdk::consensus::service::Service;
+use sawtooth_sdk::consensus::{
+  engine::{Engine, Error, StartupState, Update},
+  service::Service,
+};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::RecvTimeoutError;
 
@@ -35,13 +34,13 @@ impl Engine for PowEngine {
   fn start(
     &mut self,
     updates: Receiver<Update>,
-    service: Box<dyn Service>,
+    _service: Box<dyn Service>,
     startup: StartupState,
   ) -> Result<(), Error> {
     // Create a new PoW node, using the engine config if one exists.
     let mut node: PowNode = match self.config.take() {
-      Some(config) => PowNode::with_config(service, config),
-      None => PowNode::new(service),
+      Some(config) => PowNode::with_config(config),
+      None => PowNode::new(),
     };
 
     // Initialize the PoW based on the current startup state received from the
@@ -51,9 +50,10 @@ impl Engine for PowEngine {
     // this means we need to handle them explicity.
     if let Err(error) = node.initialize(startup) {
       error!("Init Error: {}", error);
-      return Ok(());
+      return Err(error);
     }
 
+    //make it deterministic TODO
     loop {
       match updates.recv_timeout(node.config.update_recv_timeout) {
         Ok(update) => match node.handle_update(update) {

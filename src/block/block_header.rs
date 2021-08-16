@@ -1,18 +1,11 @@
-use anyhow::Result;
-use sawtooth_sdk::consensus::engine::Block;
 use std::borrow::Cow;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::Deref;
 
-use crate::block::BlockConsensus;
+use crate::block::{Block, BlockConsensus, ConsensusError};
 use crate::primitives::H256;
-use crate::work::digest_score;
-use crate::work::get_hasher;
-use crate::work::is_valid_proof_of_work;
-use crate::work::mkhash;
+use crate::work::{digest_score, get_hasher};
+use crate::work::{is_valid_proof_of_work, mkhash};
 
 #[derive(Clone)]
 pub struct BlockHeader<'a> {
@@ -21,26 +14,24 @@ pub struct BlockHeader<'a> {
 }
 
 impl<'a> BlockHeader<'a> {
-  pub fn owned(block: Block) -> Result<Self> {
+  pub fn owned(block: Block) -> Result<Self, ConsensusError> {
     Self::from_cow(Cow::Owned(block))
   }
 
-  pub fn borrowed(block: &'a Block) -> Result<Self> {
+  pub fn borrowed(block: &'a Block) -> Result<Self, ConsensusError> {
     Self::from_cow(Cow::Borrowed(block))
   }
 
-  pub fn from_cow(block: Cow<'a, Block>) -> Result<Self> {
-    let consensus: BlockConsensus = if block.block_num == 0 {
-      BlockConsensus::new()
+  pub fn from_cow(block: Cow<'a, Block>) -> Result<Self, ConsensusError> {
+    let consensus = if block.block_num == 0 {
+      Ok(BlockConsensus::new())
     } else {
-      BlockConsensus::deserialize(&block.payload)?
+      BlockConsensus::deserialize(&block.payload)
     };
-
-    Ok(Self { block, consensus })
-  }
-
-  pub fn is_pow(&self) -> bool {
-    self.consensus.is_pow()
+    match consensus {
+      Ok(consensus) => Ok(Self { block, consensus }),
+      Err(e) => Err(e),
+    }
   }
 
   pub fn is_genesis(&self) -> bool {
@@ -51,7 +42,7 @@ impl<'a> BlockHeader<'a> {
     2u64.pow(self.consensus.difficulty)
   }
 
-  pub fn validate(&self) -> Result<()> {
+  pub fn validate(&self) -> Result<(), ConsensusError> {
     // The genesis block is always valid
     if self.is_genesis() {
       return Ok(());
@@ -63,7 +54,7 @@ impl<'a> BlockHeader<'a> {
     Ok(())
   }
 
-  fn validate_proof_of_work(&self) -> Result<()> {
+  fn validate_proof_of_work(&self) -> Result<(), ConsensusError> {
     let hash: H256 = mkhash(
       &mut get_hasher(),
       &self.previous_id,
@@ -74,11 +65,7 @@ impl<'a> BlockHeader<'a> {
     if is_valid_proof_of_work(&hash, self.consensus.difficulty) {
       Ok(())
     } else {
-      Err(anyhow!(
-        "Invalid PoW Hash (target: {}/{})",
-        digest_score(&hash),
-        self.consensus.difficulty
-      ))
+      Err(ConsensusError::InvalidHash(format!("({}/ diff:{})", digest_score(&hash), self.consensus.difficulty)))
     }
   }
 }

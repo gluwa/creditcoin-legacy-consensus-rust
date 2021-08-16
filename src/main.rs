@@ -6,13 +6,10 @@ extern crate log;
 
 use anyhow::Result;
 use ccconsensus::engine::PowEngine;
-use fern::Dispatch;
-use fern::FormatCallback;
-use log::LevelFilter;
-use log::Record;
+use fern::{Dispatch, FormatCallback, colors::{ColoredLevelConfig,Color}};
+use log::{LevelFilter, Record};
 use sawtooth_sdk::consensus::zmq_driver::ZmqDriver;
-use std::fmt::Arguments;
-use std::io::stdout;
+use std::{fmt::Arguments, io::stdout};
 
 const DEFAULT_ENDPOINT: &str = "tcp://localhost:5050";
 
@@ -23,29 +20,22 @@ fn fmt_log(out: FormatCallback, message: &Arguments, record: &Record) {
     .module_path_static()
     .or_else(|| record.module_path())
     .unwrap_or_else(|| "???");
+  let colors = ColoredLevelConfig::new()
+    .info(Color::Green)
+    .debug(Color::Blue)
+    .trace(Color::BrightMagenta);
 
   out.finish(format_args!(
     "[{} {:<5} {}] {}",
     chrono::Utc::now().format(TIME_FMT),
-    record.level(),
+    colors.color(record.level()),
     module,
     message
   ))
 }
 
-fn main() -> Result<()> {
-  let matches = clap_app!(consensus_engine =>
-    (version: crate_version!())
-    (author: crate_authors!())
-    (about: crate_description!())
-    (@arg endpoint: -E --endpoint +takes_value "connection endpoint for validator")
-    (@arg verbose: -v --verbose +multiple "increase output verbosity")
-  )
-  .get_matches();
-
-  let endpoint: &str = matches.value_of("endpoint").unwrap_or(DEFAULT_ENDPOINT);
-
-  let level = match matches.occurrences_of("verbose") {
+fn setup_logs(verbose_count: u64) -> Result<()> {
+  let level = match verbose_count {
     0 => LevelFilter::Warn,
     1 => LevelFilter::Info,
     2 => LevelFilter::Debug,
@@ -59,6 +49,22 @@ fn main() -> Result<()> {
     .format(fmt_log)
     .chain(stdout())
     .apply()?;
+
+  Ok(())
+}
+
+fn main() -> Result<()> {
+  let matches = clap_app!(consensus_engine =>
+    (version: crate_version!())
+    (author: crate_authors!())
+    (about: crate_description!())
+    (@arg endpoint: -E --endpoint +takes_value "connection endpoint for validator")
+    (@arg verbose: -v --verbose +multiple "increase output verbosity")
+  )
+  .get_matches();
+
+  let endpoint: &str = matches.value_of("endpoint").unwrap_or(DEFAULT_ENDPOINT);
+  setup_logs(matches.occurrences_of("verbose"))?;
 
   info!("PoW engine ({})", env!("CARGO_PKG_VERSION"));
   info!("PoW engine connecting to {} ...", endpoint);

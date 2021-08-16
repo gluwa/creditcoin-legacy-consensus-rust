@@ -1,8 +1,8 @@
-use sawtooth_sdk::consensus::engine::BlockId;
 use sawtooth_sdk::consensus::engine::PeerId;
 use std::collections::BTreeSet;
 
 use crate::node::Guard;
+use crate::block::BlockId;
 
 #[derive(Debug, Default)]
 pub struct PowState {
