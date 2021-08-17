@@ -122,7 +122,7 @@ impl BlockConsensus {
     match from_utf8(slice.as_ref()) {
       Ok(string) => string
         .parse::<U>()
-        .map_err(|e| ConsensusError::ParsingError(format!("{}:{}",property,e.to_string()))),
+        .map_err(|e| ConsensusError::ParsingError(format!("{}:{}", property, e.to_string()))),
       Err(e) => Err(ConsensusError::ParsingError(e.to_string())),
     }
   }
@@ -137,7 +137,7 @@ impl BlockConsensus {
 pub enum ConsensusError {
   ParsingError(String),
   NotPoWError(String),
-  InvalidHash(String)
+  InvalidHash(String),
 }
 
 impl error::Error for ConsensusError {}
@@ -148,7 +148,7 @@ impl fmt::Display for ConsensusError {
     match *self {
       ParsingError(ref s) => write!(f, "Unparsable Consensus: {}", s),
       NotPoWError(ref s) => write!(f, "Not PoW Consensus: {}", s),
-      InvalidHash(ref s) => write!(f, "Hash doesn't meet diffulty {}", s)
+      InvalidHash(ref s) => write!(f, "Hash doesn't meet diffulty {}", s),
     }
   }
 }
@@ -178,7 +178,7 @@ mod tests {
     let consensus = b"PoW:30:123:500.555";
     let consensus = BlockConsensus::deserialize(consensus).unwrap();
 
-    assert_eq!(&consensus.tag, b"PoW");
+    assert_eq!(&consensus.tag, POW_BYTES);
     assert_eq!(consensus.difficulty, 30);
     assert_eq!(consensus.nonce, 123);
     assert_eq!(consensus.timestamp, 500.555);
