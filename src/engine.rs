@@ -1,4 +1,3 @@
-use anyhow::Result;
 use sawtooth_sdk::consensus::{
   engine::{Engine, Error, StartupState, Update},
   service::Service,
@@ -34,13 +33,13 @@ impl Engine for PowEngine {
   fn start(
     &mut self,
     updates: Receiver<Update>,
-    _service: Box<dyn Service>,
+    service: Box<dyn Service>,
     startup: StartupState,
   ) -> Result<(), Error> {
     // Create a new PoW node, using the engine config if one exists.
     let mut node: PowNode = match self.config.take() {
-      Some(config) => PowNode::with_config(config),
-      None => PowNode::new(),
+      Some(config) => PowNode::with_config(config, service),
+      None => PowNode::new(service),
     };
 
     // Initialize the PoW based on the current startup state received from the

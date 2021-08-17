@@ -22,11 +22,11 @@ pub struct PowNode {
 }
 
 impl PowNode {
-  pub fn new() -> Self {
-    Self::with_config(PowConfig::new())
+  pub fn new(service: Box<dyn Service>) -> Self {
+    Self::with_config(PowConfig::new(), service)
   }
 
-  pub fn with_config(config: PowConfig) -> Self {
+  pub fn with_config(config: PowConfig, service: Box<dyn Service>) -> Self {
     let state: PowState = PowState::new();
     let miner: Miner = Miner::new().unwrap();
 
@@ -34,7 +34,7 @@ impl PowNode {
       config,
       state,
       miner,
-      service: PowService {},
+      service: PowService::new(service),
     }
   }
 
@@ -224,9 +224,12 @@ impl PowNode {
     self.state.guards.remove(&Guard::Publish);
 
     // Start the PoW process for this block
-    self
-      .miner
-      .mine(block_id.clone(), self.state.peer_id.clone(), &mut self.service, &self.config)?;
+    self.miner.mine(
+      block_id.clone(),
+      self.state.peer_id.clone(),
+      &mut self.service,
+      &self.config,
+    )?;
 
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
