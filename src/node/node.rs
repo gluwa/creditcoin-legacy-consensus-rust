@@ -130,37 +130,26 @@ impl PowNode {
 
   pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
     match update {
-      Update::BlockNew(block) => {
-        self.on_block_new(block)?;
-      }
-      Update::BlockValid(block_id) => {
-        self.on_block_valid(block_id)?;
-      }
-      Update::BlockInvalid(block_id) => {
-        self.on_block_invalid(block_id)?;
-      }
-      Update::BlockCommit(block_id) => {
-        self.on_block_commit(block_id)?;
-      }
-      Update::Shutdown => {
-        return Ok(false);
-      }
-      Update::PeerConnected(_) | Update::PeerDisconnected(_) | Update::PeerMessage(_, _) => {
+      Update::BlockNew(block) => self.on_block_new(block),
+      Update::BlockValid(block_id) => self.on_block_valid(block_id),
+      Update::BlockInvalid(block_id) => self.on_block_invalid(block_id),
+      Update::BlockCommit(block_id) => self.on_block_commit(block_id),
+      Update::Shutdown => Ok(false),
+      Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
+        Ok(false)
       }
     }
-
-    Ok(true)
   }
 
   /// Called when a new block is received and validated
-  fn on_block_new(&mut self, block: Block) -> Result<(), Error> {
+  fn on_block_new(&mut self, block: Block) -> Result<bool, Error> {
     debug!("Checking block consensus: {}", Printer(&block));
 
     // This should never happen under normal circumstances
     if block.previous_id == NULL_BLOCK_IDENTIFIER {
       error!("Received Update::BlockNew for genesis block!");
-      return Ok(());
+      return Ok(true);
     }
 
     let header: Result<(), ConsensusError> =
@@ -180,11 +169,11 @@ impl PowNode {
       }
     }
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block check succeeds
-  fn on_block_valid(&mut self, block_id: BlockId) -> Result<(), Error> {
+  fn on_block_valid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     let cur_head: Block = self.service.get_block(&self.state.chain_head)?;
     let new_head: Block = self.service.get_block(&block_id)?;
 
@@ -196,19 +185,19 @@ impl PowNode {
 
     self.compare_forks(cur_head, new_head)?;
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block check fails
-  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<(), Error> {
+  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     // Mark the block as failed by consensus, let the validator know
     self.service.fail_block(block_id)?;
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block commit completes
-  fn on_block_commit(&mut self, block_id: BlockId) -> Result<(), Error> {
+  fn on_block_commit(&mut self, block_id: BlockId) -> Result<bool, Error> {
     debug!("Chain head updated to {}", dbg_hex!(&block_id));
 
     // Stop adding batches to the current block and abandon it.
@@ -234,7 +223,7 @@ impl PowNode {
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
 
-    Ok(())
+    Ok(true)
   }
 
   fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {

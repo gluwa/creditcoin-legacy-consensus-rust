@@ -27,6 +27,26 @@ impl PowEngine {
       config: Some(config),
     }
   }
+
+  fn event_loop(updates: Receiver<Update>, mut node: PowNode) {
+    loop {
+      let call = updates.recv_timeout(node.config.update_recv_timeout);
+      trace!("Incoming call {:?}", call);
+
+      match call {
+        Ok(update) => match node.handle_update(update) {
+          Ok(true) => {}
+          Ok(false) => break,
+          Err(error) => error!("Update Error: {}", error),
+        },
+        Err(RecvTimeoutError::Disconnected) => {
+          error!("Disconnected from validator");
+          break;
+        }
+        Err(RecvTimeoutError::Timeout) => {}
+      }
+    }
+  }
 }
 
 impl Engine for PowEngine {
@@ -52,25 +72,7 @@ impl Engine for PowEngine {
       return Err(error);
     }
 
-    //make it deterministic TODO
-    loop {
-      match updates.recv_timeout(node.config.update_recv_timeout) {
-        Ok(update) => match node.handle_update(update) {
-          Ok(true) => {}
-          Ok(false) => break,
-          Err(error) => error!("Update Error: {}", error),
-        },
-        Err(RecvTimeoutError::Disconnected) => {
-          error!("Disconnected from validator");
-          break;
-        }
-        Err(RecvTimeoutError::Timeout) => {}
-      }
-
-      if let Err(error) = node.try_publish() {
-        error!("Publish Error: {}", error);
-      }
-    }
+    PowEngine::event_loop(updates, node);
 
     Ok(())
   }
