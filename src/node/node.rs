@@ -203,11 +203,11 @@ impl PowNode {
     // Stop adding batches to the current block and abandon it.
     self.service.cancel_block()?;
 
-    // Refresh on-chain configuration
-    self.reload_configuration()?;
-
     // Update local chain head reference
     self.state.chain_head = block_id.to_owned();
+
+    // Refresh on-chain configuration
+    self.reload_configuration()?;
 
     // Remove the publishing guard, allow publishing a new block when appropriate
     self.state.guards.remove(&Guard::Publish);
