@@ -191,19 +191,25 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus difficulty")]
+  #[should_panic(
+    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("difficulty:invalid digit found in string")"#
+  )]
   fn test_deserialize_invalid_difficulty() {
     BlockConsensus::deserialize(b"PoW:---:123:500.555").unwrap();
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus nonce")]
+  #[should_panic(
+    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("nonce:invalid digit found in string")"#
+  )]
   fn test_deserialize_invalid_nonce() {
     BlockConsensus::deserialize(b"PoW:30:---:500.555").unwrap();
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus timestamp")]
+  #[should_panic(
+    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("timestamp:invalid float literal")"#
+  )]
   fn test_deserialize_invalid_timestamp() {
     BlockConsensus::deserialize(b"PoW:30:123:---").unwrap();
   }
