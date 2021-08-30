@@ -3,10 +3,8 @@ use sawtooth_sdk::consensus::{
   service::Service,
 };
 use std::sync::mpsc::Receiver;
-use std::sync::mpsc::RecvTimeoutError;
 
-use crate::node::PowConfig;
-use crate::node::PowNode;
+use crate::{Duration, futures::{Arc, AtomicBool, Builder, PublishSchedulerFuture, UpdateStream}, node::{PowConfig, PowNode}};
 
 const ENGINE_NAME: &str = "PoW";
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,26 +23,6 @@ impl PowEngine {
   pub const fn with_config(config: PowConfig) -> Self {
     Self {
       config: Some(config),
-    }
-  }
-
-  fn event_loop(updates: Receiver<Update>, mut node: PowNode) {
-    loop {
-      let call = updates.recv_timeout(node.config.update_recv_timeout);
-      trace!("Incoming call {:?}", call);
-
-      match call {
-        Ok(update) => match node.handle_update(update) {
-          Ok(true) => {}
-          Ok(false) => break,
-          Err(error) => error!("Update Error: {}", error),
-        },
-        Err(RecvTimeoutError::Disconnected) => {
-          error!("Disconnected from validator");
-          break;
-        }
-        Err(RecvTimeoutError::Timeout) => {}
-      }
     }
   }
 }
@@ -72,7 +50,27 @@ impl Engine for PowEngine {
       return Err(error);
     }
 
-    PowEngine::event_loop(updates, node);
+    let rt = Builder::new_multi_thread()
+      .worker_threads(1)
+      .enable_all()
+      .thread_name("engine-runtime")
+      .build()
+      .expect("Async runtime");
+
+    let flag = Arc::new(AtomicBool::new(false));
+    let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
+
+    {
+      let flag = flag.clone();
+      let fut = async move {
+        PublishSchedulerFuture::schedule_publishing(flag, time_til_publishing).await;
+      };
+      rt.spawn(fut);
+    }
+
+    let stream = UpdateStream::new(updates, node);
+
+    rt.block_on(stream.update_loop());
 
     Ok(())
   }

@@ -3,15 +3,16 @@ use sawtooth_sdk::consensus::{
   engine::{Error, StartupState, Update},
   service::Service,
 };
+
+#[cfg(not(test))]
 use std::borrow::Cow;
 
-use crate::block::{Block, BlockAncestors, BlockConsensus, BlockId, ConsensusError};
+#[cfg(not(test))]
+use crate::block::{Block, BlockAncestors, BlockConsensus, BlockHeader, BlockId, ConsensusError};
 use crate::node::{Guard, PowConfig, PowService, PowState};
-use crate::{
-  block::{BlockHeader, BlockPrinter as Printer},
-  miner::Miner,
-};
+use crate::{block::BlockPrinter as Printer, miner::Miner};
 
+#[cfg(not(test))]
 const NULL_BLOCK_IDENTIFIER: [u8; 8] = [0; 8];
 
 pub struct PowNode {
@@ -49,19 +50,22 @@ impl PowNode {
     // Store the chain head id for quick comparisons when required
     self.state.chain_head = state.chain_head.block_id;
 
-    // Set initial on-chain configuration
-    self.reload_configuration()?;
+    #[cfg(not(test))]
+    {
+      // Set initial on-chain configuration
+      self.reload_configuration()?;
 
-    // Start the inital PoW process with the current chain head
-    self.miner.mine(
-      self.state.chain_head.clone(),
-      self.state.peer_id.clone(),
-      &mut self.service,
-      &self.config,
-    )?;
+      // Start the inital PoW process with the current chain head
+      self.miner.mine(
+        self.state.chain_head.clone(),
+        self.state.peer_id.clone(),
+        &mut self.service,
+        &self.config,
+      )?;
 
-    // Initialize a new block based on the current chain head
-    self.service.initialize_block(None)?;
+      // Initialize a new block based on the current chain head
+      self.service.initialize_block(None)?;
+    }
 
     Ok(())
   }
@@ -125,9 +129,11 @@ impl PowNode {
       }
     }
 
+    //consider when is it necessary to commit a block
     Ok(())
   }
 
+  #[cfg(not(test))]
   pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
     match update {
       Update::BlockNew(block) => self.on_block_new(block),
@@ -142,7 +148,30 @@ impl PowNode {
     }
   }
 
-  /// Called when a new block is received and validated
+  #[cfg(test)]
+  pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
+    let (msg, res) = match update {
+      Update::BlockNew(..) => ("BlockNew", Ok(true)),
+      Update::BlockValid(..) => ("BlockValid", Ok(true)),
+      Update::BlockInvalid(..) => ("BlockInvalid", Ok(true)),
+      Update::BlockCommit(..) => ("BlockCommit", Ok(true)),
+      Update::Shutdown => ("Shutdown", Ok(false)),
+      Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
+        // ignore peer-related messages
+        ("PeerGenericUpdate", Ok(false))
+      }
+    };
+    println!("{}", msg);
+    res
+  }
+
+  /// Called when a new block is received; call for validation or fail the block.
+  /// Handle a `BlockValid` update from the Validator
+  ///
+  /// The block has been verified by the validator, so mark it as validated in the log and
+  /// attempt to handle the block.
+
+  #[cfg(not(test))]
   fn on_block_new(&mut self, block: Block) -> Result<bool, Error> {
     debug!("Checking block consensus: {}", Printer(&block));
 
@@ -173,6 +202,7 @@ impl PowNode {
   }
 
   /// Called when a block check succeeds
+  #[cfg(not(test))]
   fn on_block_valid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     let cur_head: Block = self.service.get_block(&self.state.chain_head)?;
     let new_head: Block = self.service.get_block(&block_id)?;
@@ -184,11 +214,13 @@ impl PowNode {
     );
 
     self.compare_forks(cur_head, new_head)?;
+    //check for fork resolution and commit block?
 
     Ok(true)
   }
 
   /// Called when a block check fails
+  #[cfg(not(test))]
   fn on_block_invalid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     // Mark the block as failed by consensus, let the validator know
     self.service.fail_block(block_id)?;
@@ -197,6 +229,7 @@ impl PowNode {
   }
 
   /// Called when a block commit completes
+  #[cfg(not(test))]
   fn on_block_commit(&mut self, block_id: BlockId) -> Result<bool, Error> {
     debug!("Chain head updated to {}", dbg_hex!(&block_id));
 
@@ -226,6 +259,7 @@ impl PowNode {
     Ok(true)
   }
 
+  #[cfg(not(test))]
   fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {
     if !BlockConsensus::is_pow_consensus(&new_head.payload) {
       debug!("Ignoring new block (consensus) {}", Printer(&new_head));
@@ -263,6 +297,7 @@ impl PowNode {
     Ok(())
   }
 
+  #[cfg(not(test))]
   fn resolve_fork(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {
     let cur_diff_size: u64 = cur_head.block_num.saturating_sub(new_head.block_num);
     let new_diff_size: u64 = new_head.block_num.saturating_sub(cur_head.block_num);

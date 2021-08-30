@@ -1,12 +1,9 @@
-use sawtooth_sdk::consensus::{
-  engine::{Error},
-  service::Service,
-};
+use sawtooth_sdk::consensus::engine::Error;
 use std::collections::HashMap;
 use std::{str::FromStr, time::Duration};
 
+use crate::block::BlockId;
 use crate::node::PowService;
-use crate::block::{BlockId};
 
 const INITIAL_DIFFICULTY: u32 = 22;
 const SECONDS_BETWEEN_BLOCKS: u64 = 60;
