@@ -3,6 +3,7 @@ use sawtooth_sdk::consensus::{
   service::Service,
 };
 
+use crate::utils::to_hex;
 use std::ops::{Deref, DerefMut};
 
 pub struct PowService {
@@ -34,9 +35,7 @@ impl PowService {
       .get_blocks(vec![block_id.to_owned()])
       .expect(&format!("Block {}", dbg_hex!(block_id)))
       .remove(block_id)
-      .ok_or(Error::UnknownBlock(
-        String::from_utf8(block_id.to_owned()).expect(&format!("utf-8 {}", dbg_hex!(block_id))),
-      ))
+      .ok_or(Error::UnknownBlock(to_hex(block_id)))
   }
 }
 
