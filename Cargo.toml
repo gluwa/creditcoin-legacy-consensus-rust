@@ -12,6 +12,10 @@ edition = "2018"
 name = "ccconsensus"
 path = "src/main.rs"
 
+[features]
+test-futures = []
+
+
 [dependencies]
 anyhow = "1.0.31"
 byteorder = "1.3.4"

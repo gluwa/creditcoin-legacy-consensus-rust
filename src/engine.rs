@@ -4,7 +4,11 @@ use sawtooth_sdk::consensus::{
 };
 use std::sync::mpsc::Receiver;
 
-use crate::{Duration, futures::{Arc, AtomicBool, Builder, PublishSchedulerFuture, UpdateStream}, node::{PowConfig, PowNode}};
+use crate::{
+  futures::{Builder, UpdateStream},
+  node::{PowConfig, PowNode},
+  Duration,
+};
 
 const ENGINE_NAME: &str = "PoW";
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -57,20 +61,12 @@ impl Engine for PowEngine {
       .build()
       .expect("Async runtime");
 
-    let flag = Arc::new(AtomicBool::new(false));
-    let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
-
     {
-      let flag = flag.clone();
-      let fut = async move {
-        PublishSchedulerFuture::schedule_publishing(flag, time_til_publishing).await;
-      };
-      rt.spawn(fut);
+      let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
+      let stream = UpdateStream::new(updates, node, time_til_publishing);
+
+      rt.block_on(stream.update_loop());
     }
-
-    let stream = UpdateStream::new(updates, node);
-
-    rt.block_on(stream.update_loop());
 
     Ok(())
   }

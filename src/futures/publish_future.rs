@@ -4,16 +4,15 @@ A future that will flag the publishing time using an atomic construct.
 use tokio::time::Sleep;
 
 use crate::futures::*;
-use crate::primitives::PublishingFlag;
 
 ///schedule a task to mark publishing time, after publishing, reschedule a new publishing future.
 pub struct PublishSchedulerFuture {
-  flag: PublishingFlag,
+  flag: AtomicFlag,
   sleep: Pin<Box<Sleep>>,
 }
 
 impl PublishSchedulerFuture {
-  pub fn schedule_publishing(flag: PublishingFlag, time_til_publishing: Duration) -> Self {
+  pub fn schedule_publishing(flag: AtomicFlag, time_til_publishing: Duration) -> Self {
     PublishSchedulerFuture {
       flag,
       sleep: Box::pin(sleep(time_til_publishing)),
@@ -36,6 +35,8 @@ impl Future for PublishSchedulerFuture {
     }
 
     trace!("Publishing time!");
+    #[cfg(feature = "test-futures")]
+    println!("Publishing time!");
     //set atomic
     flag.store(true, Ordering::Release);
     Poll::Ready(())

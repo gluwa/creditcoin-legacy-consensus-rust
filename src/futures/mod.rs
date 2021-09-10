@@ -1,15 +1,15 @@
+mod event_result;
 mod publish_future;
 mod update_stream;
 
+pub use crate::primitives::{Arc, AtomicBool, AtomicFlag};
 pub use futures::stream;
 pub use std::boxed::Box;
 pub use std::future::Future;
 pub use std::future::{pending, ready};
 pub use std::pin::Pin;
-pub use std::sync::atomic::AtomicBool;
 pub use std::sync::atomic::Ordering;
 pub use std::sync::mpsc::{Receiver, RecvTimeoutError};
-pub use std::sync::Arc;
 pub use std::task::Poll;
 pub use std::time::Duration;
 pub use tokio::runtime;
