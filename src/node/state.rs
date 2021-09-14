@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use crate::node::Guard;
 use crate::block::BlockId;
+use crate::node::Guard;
 use crate::node::PeerId;
 
 #[derive(Debug, Default)]

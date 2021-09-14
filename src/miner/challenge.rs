@@ -1,7 +1,7 @@
-use crate::block::{BlockId};
+use crate::block::BlockId;
 use crate::node::PeerId;
+use crate::primitives::{CCDifficulty, CCTimestamp};
 use std::fmt::{Debug, Formatter, Result};
-use crate::primitives::{CCDifficulty,CCTimestamp};
 
 #[derive(Clone)]
 pub struct Challenge {

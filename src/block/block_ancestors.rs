@@ -27,7 +27,7 @@ where
     }
   }
 
-  pub fn paired_fork_iter(self, foreign_head_block: &'a Block) -> PairedFork<'a,T> {
+  pub fn paired_fork_iter(self, foreign_head_block: &'a Block) -> PairedFork<'a, T> {
     let BlockAncestors { block, service } = self;
     let local_head_block = block;
     let foreign_head_block = Some(Cow::Borrowed(foreign_head_block));

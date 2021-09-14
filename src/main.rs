@@ -6,7 +6,10 @@ extern crate log;
 
 use anyhow::Result;
 use ccconsensus::engine::PowEngine;
-use fern::{Dispatch, FormatCallback, colors::{ColoredLevelConfig,Color}};
+use fern::{
+  colors::{Color, ColoredLevelConfig},
+  Dispatch, FormatCallback,
+};
 use log::{LevelFilter, Record};
 use sawtooth_sdk::consensus::zmq_driver::ZmqDriver;
 use std::{fmt::Arguments, io::stdout};

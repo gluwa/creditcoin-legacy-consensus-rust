@@ -1,6 +1,5 @@
+use crate::block::{BlockConsensus, SerializedBlockConsensus};
 use crate::miner::Challenge;
-use crate::block::{BlockConsensus,SerializedBlockConsensus};
-
 
 #[derive(Clone, Debug)]
 pub struct Answer {
@@ -8,12 +7,12 @@ pub struct Answer {
   pub nonce: u64,
 }
 
-impl From<&Answer> for SerializedBlockConsensus{
-    fn from(answer: &Answer) -> Self {
-      BlockConsensus::serialize(
+impl From<&Answer> for SerializedBlockConsensus {
+  fn from(answer: &Answer) -> Self {
+    BlockConsensus::serialize(
       answer.challenge.difficulty,
       answer.challenge.timestamp,
-      answer.nonce
-      )
-    }
+      answer.nonce,
+    )
+  }
 }
