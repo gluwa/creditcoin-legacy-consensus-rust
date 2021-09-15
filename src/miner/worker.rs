@@ -1,4 +1,3 @@
-use anyhow::Result;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use rand::Rng;
@@ -8,7 +7,7 @@ use std::thread::JoinHandle;
 use crate::miner::{Answer, Challenge, Channel};
 use crate::primitives::H256;
 use crate::utils::to_hex;
-use crate::work::{get_hasher, is_valid_proof_of_work, Hasher, mkhash_into};
+use crate::work::{get_hasher, is_valid_proof_of_work, mkhash_into, Hasher};
 
 type Parent = Channel<Message, Answer>;
 type Child = Channel<Answer, Message>;
@@ -26,7 +25,7 @@ pub struct Worker {
 }
 
 impl Worker {
-  pub fn new() -> Result<Self> {
+  pub fn new() -> Self {
     let (chan1, chan2): (Parent, Child) = Channel::duplex();
 
     let handle: JoinHandle<()> = Builder::new()
@@ -34,10 +33,10 @@ impl Worker {
       .spawn(Self::task(chan2))
       .expect("Worker thread failed to spawn");
 
-    Ok(Self {
+    Self {
       channel: chan1,
       handle: Some(handle),
-    })
+    }
   }
 
   pub fn send(&self, challenge: Challenge) {

@@ -3,12 +3,15 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use sawtooth_sdk::consensus::engine::Error;
 
-use crate::{block::{BlockHeader, BlockId, SerializedBlockConsensus, Block}, node::{PowService}};
 use crate::utils::utc_seconds_f64;
 use crate::work::get_difficulty;
 use crate::{
-  miner::{Answer, Challenge, MinerError, Worker},
-  node::{PowConfig, PeerId},
+  block::{Block, BlockHeader, BlockId, SerializedBlockConsensus},
+  node::PowService,
+};
+use crate::{
+  miner::{Answer, Challenge, Worker},
+  node::{PeerId, PowConfig},
 };
 
 pub struct Miner {
@@ -17,14 +20,10 @@ pub struct Miner {
 }
 
 impl Miner {
-  pub fn new() -> Result<Self, MinerError> {
-    //TODO handle workererrors
-    match Worker::new().or(Err(MinerError::UnknownError)) {
-      Ok(worker) => Ok(Self {
-        worker,
-        answer: RefCell::new(None),
-      }),
-      Err(e) => Err(e),
+  pub fn new() -> Self {
+    Self {
+      worker: Worker::new(),
+      answer: RefCell::new(None),
     }
   }
 
