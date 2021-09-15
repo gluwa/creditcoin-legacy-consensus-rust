@@ -1,0 +1,125 @@
+name: CI
+on:
+  push:
+    branches: main
+  pull_request:
+
+jobs:
+  check:
+    name: Check Build
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake make gcc protobuf-compiler libzmq3-dev
+      - name: Check crate without default features
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --no-default-features
+      - name: Check crate with all features
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all-features
+  test:
+    name: Testing ${{ matrix.feature }} with Rust ${{ matrix.toolchain}}
+    runs-on: ubuntu-18.04
+    continue-on-error: ${{ matrix.toolchain == 'nightly' }}
+    strategy:
+      matrix:
+        feature: [""]
+        toolchain: ["nightly", "stable"]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake make gcc protobuf-compiler libzmq3-dev
+
+      - name: Configure flags for collecting coverage
+        if: matrix.toolchain == 'nightly'
+        run: |
+          echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests" >> $GITHUB_ENV
+          echo "RUSTDOCFLAGS=-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests" >> $GITHUB_ENV
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: ${{ matrix.feature }}
+        env:
+          CARGO_INCREMENTAL: ${{ env.CARGO_INCREMENTAL }}
+          RUSTFLAGS: ${{ env.RUSTFLAGS }}
+          RUSTDOCFLAGS: ${{ env.RUSTDOCFLAGS }}
+      - id: coverage
+        if: matrix.toolchain == 'nightly'
+        uses: actions-rs/grcov@v0.1
+        with:
+          config: .grcov.yml
+
+      - name: Exclude target/debug/ dir from coverage reports
+        if: matrix.toolchain == 'nightly'
+        run: |
+          rm -rf target/
+
+      - uses: codecov/codecov-action@v2
+        if: matrix.toolchain == 'nightly'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ steps.coverage.outputs.report }}
+          fail_ci_if_error: true
+          verbose: true
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: rustfmt
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: clippy
+      - uses: Swatinem/rust-cache@v1
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake make gcc protobuf-compiler libzmq3-dev
+      - name: Run Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
