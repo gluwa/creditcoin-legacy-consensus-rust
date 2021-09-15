@@ -34,10 +34,7 @@ pub struct BlockConsensus {
 
 impl BlockConsensus {
   pub fn is_pow_consensus(payload: &[u8]) -> bool {
-    match Self::deserialize(payload) {
-      Ok(consensus) if consensus.is_pow() => true,
-      _ => false,
-    }
+    matches!(Self::deserialize(payload), Ok(consensus) if consensus.is_pow())
   }
 
   pub fn serialize(difficulty: CCDifficulty, timestamp: CCTimestamp, nonce: CCNonce) -> Vec<u8> {

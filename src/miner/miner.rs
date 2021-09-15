@@ -33,10 +33,7 @@ impl Miner {
       self.answer.borrow_mut().replace(answer);
     }
 
-    match self.answer.borrow().as_ref() {
-      Some(answer) => Some(answer.into()),
-      None => None,
-    }
+    self.answer.borrow().as_ref().map(|answer| answer.into())
   }
 
   pub fn reset(&self) {

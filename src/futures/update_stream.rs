@@ -32,19 +32,15 @@ impl UpdateStream {
     }
   }
 
-  fn toggle_off_reactor(flag: AtomicFlag) -> impl futures::Future<Output = ()> {
-    async move {
-      while flag.load(Ordering::Acquire) {
-        sleep(Duration::from_millis(10)).await
-      }
+  async fn toggle_off_reactor(flag: AtomicFlag) {
+    while flag.load(Ordering::Acquire) {
+      sleep(Duration::from_millis(10)).await
     }
   }
 
-  fn toggle_on_reactor(flag: AtomicFlag) -> impl futures::Future<Output = ()> {
-    async move {
-      while !flag.load(Ordering::Acquire) {
-        sleep(Duration::from_millis(10)).await
-      }
+  async fn toggle_on_reactor(flag: AtomicFlag) {
+    while !flag.load(Ordering::Acquire) {
+      sleep(Duration::from_millis(10)).await
     }
   }
 

@@ -49,10 +49,9 @@ where
       .and_then(|block_id| (*self.service).get_block(&block_id).ok())
       .and_then(|block| BlockHeader::owned(block).ok());
 
-    self.block = match result {
-      Some(ref block) => Some(Cow::Owned(block.previous_id.to_owned())),
-      None => None,
-    };
+    self.block = result
+      .as_ref()
+      .map(|block| Cow::Owned(block.previous_id.to_owned()));
 
     result
   }

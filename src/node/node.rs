@@ -313,7 +313,7 @@ impl PowNode {
           return Ok(EventPublishResult::Pending);
         }
         Err(error) => {
-          return Err(error.into());
+          return Err(error);
         }
       }
     }
@@ -339,7 +339,7 @@ impl PowNode {
           return Ok(EventPublishResult::Pending);
         }
         Err(error) => {
-          return Err(error.into());
+          return Err(error);
         }
       }
     }

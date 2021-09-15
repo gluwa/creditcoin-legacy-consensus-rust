@@ -76,7 +76,7 @@ impl Engine for PowEngine {
   }
 
   fn version(&self) -> String {
-    let idx = ENGINE_VERSION.rfind(".").expect("PATCH");
+    let idx = ENGINE_VERSION.rfind('.').expect("PATCH");
     ENGINE_VERSION[0..idx].into()
   }
 

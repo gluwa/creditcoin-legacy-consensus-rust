@@ -22,7 +22,7 @@ fn fmt_log(out: FormatCallback, message: &Arguments, record: &Record) {
   let module: &str = record
     .module_path_static()
     .or_else(|| record.module_path())
-    .unwrap_or_else(|| "???");
+    .unwrap_or("???");
   let colors = ColoredLevelConfig::new()
     .info(Color::Green)
     .debug(Color::Blue)

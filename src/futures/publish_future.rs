@@ -30,7 +30,7 @@ impl Future for PublishSchedulerFuture {
     cx: &mut std::task::Context<'_>,
   ) -> std::task::Poll<Self::Output> {
     let PublishSchedulerFuture { flag, sleep } = self.get_mut();
-    if let Poll::Pending = Pin::new(sleep).poll(cx) {
+    if Pin::new(sleep).poll(cx).is_pending() {
       return Poll::Pending;
     }
 
