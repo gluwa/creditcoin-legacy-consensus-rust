@@ -29,7 +29,6 @@ where
       service,
     }
   }
-
 }
 
 impl<'a, T> Iterator for PairedFork<'a, T>
@@ -65,10 +64,10 @@ where
         .and_then(|block_id| (*service).get_block(&block_id).ok())
         .and_then(|block| BlockHeader::owned(block).ok());
 
-      let (netx_block, header) = tuplify(prev_block_header);
-      match fork{
-          Fork::Local => self.local_head_block = netx_block,
-          Fork::Foreign => self.foreign_head_block = netx_block
+      let (next_block, header) = tuplify(prev_block_header);
+      match fork {
+        Fork::Local => self.local_head_block = next_block,
+        Fork::Foreign => self.foreign_head_block = next_block,
       };
       header
     };

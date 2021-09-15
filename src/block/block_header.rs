@@ -24,14 +24,11 @@ impl<'a> BlockHeader<'a> {
 
   pub fn from_cow(block: Cow<'a, Block>) -> Result<Self, ConsensusError> {
     let consensus = if block.block_num == 0 {
-      Ok(BlockConsensus::new())
+      BlockConsensus::new()
     } else {
-      BlockConsensus::deserialize(&block.payload)
+      BlockConsensus::deserialize(&block.payload)?
     };
-    match consensus {
-      Ok(consensus) => Ok(Self { block, consensus }),
-      Err(e) => Err(e),
-    }
+    Ok(Self { block, consensus })
   }
 
   pub fn is_genesis(&self) -> bool {
@@ -65,7 +62,11 @@ impl<'a> BlockHeader<'a> {
     if is_valid_proof_of_work(&hash, self.consensus.difficulty) {
       Ok(())
     } else {
-      Err(ConsensusError::InvalidHash(format!("({}/ diff:{})", digest_score(&hash), self.consensus.difficulty)))
+      Err(ConsensusError::InvalidHash(format!(
+        "({}/ diff:{})",
+        digest_score(&hash),
+        self.consensus.difficulty
+      )))
     }
   }
 }

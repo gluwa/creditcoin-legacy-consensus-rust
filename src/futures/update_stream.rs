@@ -152,7 +152,7 @@ impl UpdateStream {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-futures"))]
 ///Don't forget to turn the "test-futures" flag to run these tests
 /// e.g cargo test --features "test-futures" --package ccconsensus --lib -- futures::update_stream::tests --nocapture
 mod tests {
@@ -167,7 +167,6 @@ mod tests {
   use std::thread;
 
   #[test]
-  #[cfg_attr(not(feature = "test-futures"), ignore)]
   fn test_update_future() {
     let (sx, rx) = channel::<Update>();
     let t = Update::BlockCommit(vec![]);
@@ -196,7 +195,6 @@ mod tests {
   }
 
   #[test]
-  #[cfg_attr(not(feature = "test-futures"), ignore)]
   fn test_update_stream_future() {
     let (sx, rx) = channel::<Update>();
     let t = Update::BlockCommit(vec![]);
