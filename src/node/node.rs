@@ -219,12 +219,14 @@ impl PowNode {
 
     // Convert both chain heads to `BlockHeader`s. Propagate errors since
     // PoW validation should have been an earlier step.
-    let cur_header: BlockHeader = BlockHeader::borrowed(&cur_head).expect(&format!("Cur_header"));
-    let new_header: BlockHeader = BlockHeader::borrowed(&new_head).expect(&format!("New_header"));
+    let cur_header: BlockHeader = BlockHeader::borrowed(&cur_head)
+      .unwrap_or_else(|_| panic!("Cur_header {}", Printer::from(&cur_head)));
+    let new_header: BlockHeader = BlockHeader::borrowed(&new_head)
+      .unwrap_or_else(|_| panic!("New_header {}", Printer::from(&new_head)));
 
     // Fetch the earliest block from both orphan chains; default to the current head
-    let cur_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or_else(|| &cur_header);
-    let new_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or_else(|| &new_header);
+    let cur_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or(&cur_header);
+    let new_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or(&new_header);
 
     debug_assert_eq!(cur_fork_head.block_num, new_fork_head.block_num);
 
