@@ -33,9 +33,11 @@ impl PowService {
     self
       .service
       .get_blocks(vec![block_id.to_owned()])
-      .expect(&format!("Block {}", dbg_hex!(block_id)))
-      .remove(block_id)
-      .ok_or(Error::UnknownBlock(to_hex(block_id)))
+      .and_then(|mut map| {
+        map
+          .remove(block_id)
+          .ok_or_else(|| Error::UnknownBlock(to_hex(block_id)))
+      })
   }
 }
 
