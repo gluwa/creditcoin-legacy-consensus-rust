@@ -127,8 +127,7 @@ impl UpdateStream {
       }
     }
 
-    let call = self.updates.recv_timeout(Duration::from_millis(0));
-    match call {
+    match self.updates.try_recv() {
       Ok(update) => {
         trace!("Incoming update {:?}", update);
         match self.node.handle_update(update) {
@@ -140,11 +139,11 @@ impl UpdateStream {
           }
         }
       }
-      Err(RecvTimeoutError::Disconnected) => {
+      Err(TryRecvError::Disconnected) => {
         error!("Disconnected from validator");
         EventResult::Shutdown
       }
-      Err(RecvTimeoutError::Timeout) => {
+      Err(TryRecvError::Empty) => {
         sleep(Duration::from_millis(10)).await;
         EventResult::Continue
       }
