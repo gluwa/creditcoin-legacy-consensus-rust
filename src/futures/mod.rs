@@ -9,7 +9,7 @@ pub use std::future::Future;
 pub use std::future::{pending, ready};
 pub use std::pin::Pin;
 pub use std::sync::atomic::Ordering;
-pub use std::sync::mpsc::{Receiver, RecvTimeoutError};
+pub use std::sync::mpsc::{Receiver, TryRecvError};
 pub use std::task::Poll;
 pub use std::time::Duration;
 pub use tokio::runtime;
