@@ -14,19 +14,13 @@ use crate::{
   node::{PeerId, PowConfig},
 };
 
+#[derive(Default)]
 pub struct Miner {
   worker: Worker,
   answer: RefCell<Option<Answer>>,
 }
 
 impl Miner {
-  pub fn new() -> Self {
-    Self {
-      worker: Worker::new(),
-      answer: RefCell::new(None),
-    }
-  }
-
   pub fn try_create_consensus(&self) -> Option<SerializedBlockConsensus> {
     // Drain answers from the worker thread
     while let Some(answer) = self.worker.recv() {
@@ -77,5 +71,15 @@ impl Debug for Miner {
       .field("worker", &self.worker)
       .field("answer", &self.answer)
       .finish()
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  #[test]
+  fn default_miner() {
+    let m = Miner::default();
+    assert!(m.answer.take().is_none());
   }
 }

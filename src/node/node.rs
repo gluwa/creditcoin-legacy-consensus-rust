@@ -355,7 +355,7 @@ impl PowNode {
 
   pub fn with_config(config: PowConfig, service: Box<dyn Service>) -> Self {
     let state: PowState = PowState::new();
-    let miner: Miner = Miner::new();
+    let miner: Miner = Miner::default();
 
     Self {
       config,

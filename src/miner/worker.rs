@@ -24,8 +24,14 @@ pub struct Worker {
   handle: Option<JoinHandle<()>>,
 }
 
+impl Default for Worker {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Worker {
-  pub fn new() -> Self {
+  fn new() -> Self {
     let (chan1, chan2): (Parent, Child) = Channel::duplex();
 
     let handle: JoinHandle<()> = Builder::new()
