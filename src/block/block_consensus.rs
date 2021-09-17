@@ -133,7 +133,7 @@ impl BlockConsensus {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ConsensusError {
   ParsingError(String),
   NotPoWError(String),
@@ -191,26 +191,29 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(
-    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("difficulty:invalid digit found in string")"#
-  )]
   fn test_deserialize_invalid_difficulty() {
-    BlockConsensus::deserialize(b"PoW:---:123:500.555").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:---:123:500.555").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("difficulty:invalid digit found in string".into())
+    );
   }
 
   #[test]
-  #[should_panic(
-    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("nonce:invalid digit found in string")"#
-  )]
   fn test_deserialize_invalid_nonce() {
-    BlockConsensus::deserialize(b"PoW:30:---:500.555").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:30:---:500.555").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("nonce:invalid digit found in string".into())
+    );
   }
 
   #[test]
-  #[should_panic(
-    expected = r#"called `Result::unwrap()` on an `Err` value: ParsingError("timestamp:invalid float literal")"#
-  )]
   fn test_deserialize_invalid_timestamp() {
-    BlockConsensus::deserialize(b"PoW:30:123:---").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:30:123:---").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("timestamp:invalid float literal".into())
+    );
   }
 }
