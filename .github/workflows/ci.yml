@@ -18,7 +18,15 @@ jobs:
           override: true
       - uses: Swatinem/rust-cache@v1
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake make gcc protobuf-compiler libzmq3-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake make gcc libzmq3-dev
+      - name: Install protobuf
+        run: |
+          VERSION=3.5.1
+          curl -OLsS https://github.com/google/protobuf/releases/download/v$VERSION/protoc-$VERSION-linux-x86_64.zip
+          unzip protoc-$VERSION-linux-x86_64.zip -d protoc3
+          mv protoc3/bin/* /usr/local/bin/
+          mv protoc3/include/* /usr/local/include/
+          rm protoc-$VERSION-linux-x86_64.zip
       - name: Check crate without default features
         uses: actions-rs/cargo@v1
         with:
@@ -48,8 +56,15 @@ jobs:
           override: true
       - uses: Swatinem/rust-cache@v1
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake make gcc protobuf-compiler libzmq3-dev
-
+        run: sudo apt-get update && sudo apt-get install -y cmake make gcc libzmq3-dev
+      - name: Install protobuf
+        run: |
+          VERSION=3.5.1
+          curl -OLsS https://github.com/google/protobuf/releases/download/v$VERSION/protoc-$VERSION-linux-x86_64.zip
+          unzip protoc-$VERSION-linux-x86_64.zip -d protoc3
+          mv protoc3/bin/* /usr/local/bin/
+          mv protoc3/include/* /usr/local/include/
+          rm protoc-$VERSION-linux-x86_64.zip
       - name: Configure flags for collecting coverage
         if: matrix.toolchain == 'nightly'
         run: |
