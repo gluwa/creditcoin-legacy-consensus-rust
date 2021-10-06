@@ -1,19 +1,13 @@
-use anyhow::Result;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use rand::Rng;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 
-use crate::miner::Answer;
-use crate::miner::Challenge;
-use crate::miner::Channel;
+use crate::miner::{Answer, Challenge, Channel};
 use crate::primitives::H256;
 use crate::utils::to_hex;
-use crate::work::get_hasher;
-use crate::work::is_valid_proof_of_work;
-use crate::work::mkhash_into;
-use crate::work::Hasher;
+use crate::work::{get_hasher, is_valid_proof_of_work, mkhash_into, Hasher};
 
 type Parent = Channel<Message, Answer>;
 type Child = Channel<Answer, Message>;
@@ -30,8 +24,14 @@ pub struct Worker {
   handle: Option<JoinHandle<()>>,
 }
 
+impl Default for Worker {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Worker {
-  pub fn new() -> Result<Self> {
+  fn new() -> Self {
     let (chan1, chan2): (Parent, Child) = Channel::duplex();
 
     let handle: JoinHandle<()> = Builder::new()
@@ -39,10 +39,10 @@ impl Worker {
       .spawn(Self::task(chan2))
       .expect("Worker thread failed to spawn");
 
-    Ok(Self {
+    Self {
       channel: chan1,
       handle: Some(handle),
-    })
+    }
   }
 
   pub fn send(&self, challenge: Challenge) {
@@ -69,7 +69,7 @@ impl Worker {
 
         debug!("Received challenge: {:?}", challenge);
 
-        let mut nonce: u64 = rng.gen_range(0, u64::MAX);
+        let mut nonce: u64 = rng.gen_range(0..u64::MAX);
 
         'inner: loop {
           mkhash_into(
@@ -90,7 +90,7 @@ impl Worker {
               debug!("Received update: {:?}", update);
 
               challenge = update;
-              nonce = rng.gen_range(0, u64::MAX);
+              nonce = rng.gen_range(0..u64::MAX);
             }
             Some(Message::Shutdown) => {
               break 'outer;

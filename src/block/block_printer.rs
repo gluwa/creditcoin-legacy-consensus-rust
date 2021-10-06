@@ -1,4 +1,4 @@
-use sawtooth_sdk::consensus::engine::Block;
+use crate::block::Block;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;

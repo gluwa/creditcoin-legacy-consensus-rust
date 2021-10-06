@@ -1,13 +1,12 @@
-use sawtooth_sdk::consensus::engine::BlockId;
-use sawtooth_sdk::consensus::engine::PeerId;
-use std::fmt::Debug;
-use std::fmt::Formatter;
-use std::fmt::Result;
+use crate::block::BlockId;
+use crate::node::PeerId;
+use crate::primitives::{CCDifficulty, CCTimestamp};
+use std::fmt::{Debug, Formatter, Result};
 
 #[derive(Clone)]
 pub struct Challenge {
-  pub difficulty: u32,
-  pub timestamp: f64,
+  pub difficulty: CCDifficulty,
+  pub timestamp: CCTimestamp,
   pub block_id: BlockId,
   pub peer_id: PeerId,
 }

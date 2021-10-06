@@ -1,175 +1,89 @@
-use anyhow::Result;
-use sawtooth_sdk::consensus::engine::Block;
-use sawtooth_sdk::consensus::engine::BlockId;
-use sawtooth_sdk::consensus::engine::Error;
-use sawtooth_sdk::consensus::engine::StartupState;
-use sawtooth_sdk::consensus::engine::Update;
-use sawtooth_sdk::consensus::service::Service;
+pub use sawtooth_sdk::consensus::engine::PeerId;
+use sawtooth_sdk::consensus::{
+  engine::{Error, StartupState, Update},
+  service::Service,
+};
+
+#[cfg(not(feature = "test-futures"))]
 use std::borrow::Cow;
 
-use crate::block::BlockAncestors;
-use crate::block::BlockConsensus;
-use crate::block::BlockHeader;
-use crate::block::BlockPrinter as Printer;
-use crate::miner::Miner;
-use crate::node::Guard;
-use crate::node::PowConfig;
-use crate::node::PowService;
-use crate::node::PowState;
+use crate::node::{PowConfig, PowService, PowState};
+use crate::{block::BlockPrinter as Printer, miner::Miner};
+#[cfg(not(feature = "test-futures"))]
+use crate::{
+  block::{Block, BlockAncestors, BlockConsensus, BlockHeader, BlockId, ConsensusError},
+  node::Guard,
+};
 
-const NULL_BLOCK_IDENTIFIER: [u8; 8] = [0; 8];
+use super::EventPublishResult;
+
+#[cfg(not(feature = "test-futures"))]
+pub const NULL_BLOCK_IDENTIFIER: [u8; 8] = [0; 8];
 
 pub struct PowNode {
   pub config: PowConfig,
   pub service: PowService,
   state: PowState,
+  #[cfg_attr(test, allow(dead_code))]
   miner: Miner,
 }
 
+#[cfg(feature = "test-futures")]
 impl PowNode {
-  pub fn new(service: Box<dyn Service>) -> Self {
-    Self::with_config(service, PowConfig::new())
-  }
-
-  pub fn with_config(service: Box<dyn Service>, config: PowConfig) -> Self {
-    let service: PowService = PowService::new(service);
-    let state: PowState = PowState::new();
-    let miner: Miner = Miner::new().unwrap();
-
-    Self {
-      config,
-      service,
-      state,
-      miner,
-    }
-  }
-
-  pub fn initialize(&mut self, state: StartupState) -> Result<()> {
-    if state.chain_head.block_num > 1 {
-      debug!("Starting from non-genesis: {}", Printer(&state.chain_head));
-    }
-
-    // Store the public key of this validator, for signing blocks
-    self.state.peer_id = state.local_peer_info.peer_id;
-
-    // Store the chain head id for quick comparisons when required
-    self.state.chain_head = state.chain_head.block_id;
-
-    // Set initial on-chain configuration
-    self.reload_configuration()?;
-
-    // Start the inital PoW process with the current chain head
-    self.miner.mine(
-      &self.state.chain_head,
-      &self.state.peer_id,
-      &self.service,
-      &self.config,
-    )?;
-
-    // Initialize a new block based on the current chain head
-    self.service.initialize_block(None)?;
-
-    Ok(())
-  }
-
-  /// Fetch and store on-chain settings as of the current head height
-  pub fn reload_configuration(&mut self) -> Result<()> {
-    self
-      .config
-      .load(&self.service, self.state.chain_head.to_owned())
-      .map_err(Into::into)
-  }
-
-  pub fn try_publish(&mut self) -> Result<()> {
-    // If we already published at this height, exit early.
-    if self.state.guards.contains(&Guard::Publish) {
-      return Ok(());
-    }
-
-    let consensus: Vec<u8> = match self.miner.try_create_consensus()? {
-      Some(consensus) => consensus,
-      None => return Ok(()),
-    };
-
-    // Try summarizing the blocks contents with a digest
-    match self.service.summarize_block() {
-      Ok(_digest) => {
-        // Finalize the block with the current consensus
-        match self.service.finalize_block(consensus) {
-          Ok(block_id) => {
-            debug!("Publishing block: {}", dbg_hex!(&block_id));
-
-            // Set publishing guard
-            self.state.guards.insert(Guard::Publish);
-
-            // Clear log guards
-            self.state.guards.remove(&Guard::Finalize);
-            self.state.guards.remove(&Guard::Summarize);
-
-            // Reset the miner state
-            self.miner.reset();
-          }
-          Err(Error::BlockNotReady) => {
-            if self.state.guards.insert(Guard::Finalize) {
-              trace!("Cannot finalize block: not ready");
-            }
-          }
-          Err(error) => {
-            self.state.guards.remove(&Guard::Finalize);
-            return Err(error.into());
-          }
-        }
-      }
-      Err(Error::BlockNotReady) => {
-        if self.state.guards.insert(Guard::Summarize) {
-          trace!("Cannot summarize block: not ready");
-        }
-      }
-      Err(error) => {
-        self.state.guards.remove(&Guard::Summarize);
-        return Err(error.into());
-      }
-    }
-
-    Ok(())
-  }
-
-  pub fn handle_update(&mut self, update: Update) -> Result<bool> {
-    match update {
-      Update::BlockNew(block) => {
-        self.on_block_new(block)?;
-      }
-      Update::BlockValid(block_id) => {
-        self.on_block_valid(block_id)?;
-      }
-      Update::BlockInvalid(block_id) => {
-        self.on_block_invalid(block_id)?;
-      }
-      Update::BlockCommit(block_id) => {
-        self.on_block_commit(block_id)?;
-      }
-      Update::Shutdown => {
-        return Ok(false);
-      }
-      Update::PeerConnected(_) | Update::PeerDisconnected(_) | Update::PeerMessage(_, _) => {
+  pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
+    let (msg, res) = match update {
+      Update::BlockNew(..) => ("BlockNew", Ok(true)),
+      Update::BlockValid(..) => ("BlockValid", Ok(true)),
+      Update::BlockInvalid(..) => ("BlockInvalid", Ok(true)),
+      Update::BlockCommit(..) => ("BlockCommit", Ok(true)),
+      Update::Shutdown => ("Shutdown", Ok(false)),
+      Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
+        ("PeerGenericUpdate", Ok(false))
       }
-    }
-
-    Ok(true)
+    };
+    println!("{}", msg);
+    res
   }
 
-  /// Called when a new block is received and validated
-  fn on_block_new(&mut self, block: Block) -> Result<()> {
+  pub fn try_publish(&mut self) -> Result<EventPublishResult, Error> {
+    Ok(EventPublishResult::Published)
+  }
+}
+
+#[cfg(not(feature = "test-futures"))]
+impl PowNode {
+  pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
+    match update {
+      Update::BlockNew(block) => self.on_block_new(block),
+      Update::BlockValid(block_id) => self.on_block_valid(block_id),
+      Update::BlockInvalid(block_id) => self.on_block_invalid(block_id),
+      Update::BlockCommit(block_id) => self.on_block_commit(block_id),
+      Update::Shutdown => Ok(false),
+      Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
+        // ignore peer-related messages
+        Ok(false)
+      }
+    }
+  }
+
+  /// Called when a new block is received; call for validation or fail the block.
+  /// Handle a `BlockValid` update from the Validator
+  ///
+  /// The block has been verified by the validator, so mark it as validated in the log and
+  /// attempt to handle the block.
+
+  fn on_block_new(&mut self, block: Block) -> Result<bool, Error> {
     debug!("Checking block consensus: {}", Printer(&block));
 
     // This should never happen under normal circumstances
     if block.previous_id == NULL_BLOCK_IDENTIFIER {
       error!("Received Update::BlockNew for genesis block!");
-      return Ok(());
+      return Ok(true);
     }
 
-    let header: Result<()> = BlockHeader::borrowed(&block).and_then(|header| header.validate());
+    let header: Result<(), ConsensusError> =
+      BlockHeader::borrowed(&block).and_then(|header| header.validate());
 
     // Ensure the block consensus is valid
     match header {
@@ -185,11 +99,11 @@ impl PowNode {
       }
     }
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block check succeeds
-  fn on_block_valid(&mut self, block_id: BlockId) -> Result<()> {
+  fn on_block_valid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     let cur_head: Block = self.service.get_block(&self.state.chain_head)?;
     let new_head: Block = self.service.get_block(&block_id)?;
 
@@ -200,46 +114,53 @@ impl PowNode {
     );
 
     self.compare_forks(cur_head, new_head)?;
+    //check for fork resolution and commit block?
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block check fails
-  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<()> {
+  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<bool, Error> {
     // Mark the block as failed by consensus, let the validator know
     self.service.fail_block(block_id)?;
 
-    Ok(())
+    Ok(true)
   }
 
   /// Called when a block commit completes
-  fn on_block_commit(&mut self, block_id: BlockId) -> Result<()> {
+  ///Revisit on block commit, adjust publishing timer
+  fn on_block_commit(&mut self, block_id: BlockId) -> Result<bool, Error> {
     debug!("Chain head updated to {}", dbg_hex!(&block_id));
 
     // Stop adding batches to the current block and abandon it.
-    self.service.cancel_block()?;
-
-    // Refresh on-chain configuration
-    self.reload_configuration()?;
+    if !self.state.guards.contains(&Guard::Finalized) {
+      self.service.cancel_block()?;
+    }
 
     // Update local chain head reference
     self.state.chain_head = block_id.to_owned();
 
+    // Refresh on-chain configuration
+    self.reload_configuration()?;
+
     // Remove the publishing guard, allow publishing a new block when appropriate
-    self.state.guards.remove(&Guard::Publish);
+    self.state.guards.remove(&Guard::Finalized);
 
     // Start the PoW process for this block
-    self
-      .miner
-      .mine(&block_id, &self.state.peer_id, &self.service, &self.config)?;
+    self.miner.mine(
+      block_id.clone(),
+      self.state.peer_id.clone(),
+      &mut self.service,
+      &self.config,
+    )?;
 
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
 
-    Ok(())
+    Ok(true)
   }
 
-  fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<()> {
+  fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {
     if !BlockConsensus::is_pow_consensus(&new_head.payload) {
       debug!("Ignoring new block (consensus) {}", Printer(&new_head));
       self.service.ignore_block(new_head.block_id)?;
@@ -276,50 +197,50 @@ impl PowNode {
     Ok(())
   }
 
-  fn resolve_fork(&self, cur_head: Block, new_head: Block) -> Result<()> {
+  fn resolve_fork(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {
     let cur_diff_size: u64 = cur_head.block_num.saturating_sub(new_head.block_num);
     let new_diff_size: u64 = new_head.block_num.saturating_sub(cur_head.block_num);
 
     // Fetch all blocks from the current chain AFTER the head of the new chain
     // Inverse of `new_chain_orphans`.
     let cur_chain_orphans: Vec<BlockHeader> =
-      BlockAncestors::new(&cur_head.previous_id, &self.service)
+      BlockAncestors::new(&cur_head.previous_id, &mut self.service)
         .take(cur_diff_size as usize)
-        .take_while(|block| block.is_pow())
+        .take_while(|block| block.consensus.is_pow())
         .collect();
 
     // Fetch all blocks from the new chain AFTER the head of the current chain.
     // Inverse of `cur_chain_orphans`.
     let new_chain_orphans: Vec<BlockHeader> =
-      BlockAncestors::new(&new_head.previous_id, &self.service)
+      BlockAncestors::new(&new_head.previous_id, &mut self.service)
         .take(new_diff_size as usize)
-        .take_while(|block| block.is_pow())
+        .take_while(|block| block.consensus.is_pow())
         .collect();
 
     // Convert both chain heads to `BlockHeader`s. Propagate errors since
     // PoW validation should have been an earlier step.
-    let cur_header: BlockHeader = BlockHeader::borrowed(&cur_head)?;
-    let new_header: BlockHeader = BlockHeader::borrowed(&new_head)?;
+    let cur_header: BlockHeader = BlockHeader::borrowed(&cur_head)
+      .unwrap_or_else(|_| panic!("Cur_header {}", Printer::from(&cur_head)));
+    let new_header: BlockHeader = BlockHeader::borrowed(&new_head)
+      .unwrap_or_else(|_| panic!("New_header {}", Printer::from(&new_head)));
 
     // Fetch the earliest block from both orphan chains; default to the current head
-    let cur_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or_else(|| &cur_header);
-    let new_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or_else(|| &new_header);
+    let cur_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or(&cur_header);
+    let new_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or(&new_header);
 
     debug_assert_eq!(cur_fork_head.block_num, new_fork_head.block_num);
-
-    let cur_ancestors = BlockAncestors::new(&cur_fork_head.block_id, &self.service);
-    let new_ancestors = BlockAncestors::new(&new_fork_head.block_id, &self.service);
 
     // Construct a `ForkChain` to quickly traverse ancestors in pairs.
     // Traverse until:
     //   1. A common ancestor is found
     //   3. Either block is a genesis block
     //   2. Either block is NOT a PoW block
+    let cur_ancestors = BlockAncestors::new(&cur_fork_head.block_id, &mut self.service);
     let (cur_fork_blocks, new_fork_blocks): (Vec<_>, Vec<_>) = cur_ancestors
-      .zip(new_ancestors)
+      .paired_fork_iter(&new_fork_head.block_id)
       .take_while(|(block_a, block_b)| block_a.block_id != block_b.block_id)
       .take_while(|(block_a, block_b)| !block_a.is_genesis() && !block_b.is_genesis())
-      .take_while(|(block_a, block_b)| block_a.is_pow() && block_b.is_pow())
+      .take_while(|(block_a, block_b)| block_a.consensus.is_pow() && block_b.consensus.is_pow())
       .unzip();
 
     // Chain the new orphan chain with any uncommon
@@ -358,5 +279,128 @@ impl PowNode {
     }
 
     Ok(())
+  }
+
+  pub fn try_publish(&mut self) -> Result<EventPublishResult, Error> {
+    // If we already published at this height, exit early.
+    //early exit optimization
+    if self.state.guards.contains(&Guard::Finalized) {
+      //A block has not been commited yet.
+      //While we are still waiting for a block to be commited skip publishing logic.
+      return Ok(EventPublishResult::Pending);
+    }
+
+    //always update consensus, i.e. never skip it.
+    let consensus: Vec<u8> = match self.miner.try_create_consensus() {
+      Some(consensus) => {
+        self.state.guards.insert(Guard::Consensus);
+        consensus
+      }
+      None => return Ok(EventPublishResult::Pending),
+    };
+
+    // Try summarizing the blocks contents with a digest
+    //check summarize guard
+    let summarized = self.state.guards.contains(&Guard::Summarized);
+    if !summarized {
+      match self.service.summarize_block() {
+        Ok(_digest) => {
+          self.state.guards.insert(Guard::Summarized);
+          // Finalize the block with the current consensus
+        }
+        Err(Error::BlockNotReady) => {
+          trace!("Cannot summarize block: not ready");
+          return Ok(EventPublishResult::Pending);
+        }
+        Err(error) => {
+          return Err(error);
+        }
+      }
+    }
+    let finalized = self.state.guards.contains(&Guard::Finalized);
+    if !finalized {
+      match self.service.finalize_block(consensus) {
+        Ok(block_id) => {
+          debug!("Publishing block: {}", dbg_hex!(&block_id));
+
+          // Set publishing guard
+          self.state.guards.insert(Guard::Finalized);
+
+          self.state.guards.remove(&Guard::Consensus);
+          self.state.guards.remove(&Guard::Summarized);
+
+          // Reset the miner state
+          self.miner.reset();
+
+          return Ok(EventPublishResult::Published);
+        }
+        Err(Error::BlockNotReady) => {
+          trace!("Cannot finalize block: not ready");
+          return Ok(EventPublishResult::Pending);
+        }
+        Err(error) => {
+          return Err(error);
+        }
+      }
+    }
+
+    unreachable!();
+  }
+}
+
+impl PowNode {
+  pub fn new(service: Box<dyn Service>) -> Self {
+    Self::with_config(PowConfig::new(), service)
+  }
+
+  pub fn with_config(config: PowConfig, service: Box<dyn Service>) -> Self {
+    let state: PowState = PowState::new();
+    let miner: Miner = Miner::default();
+
+    Self {
+      config,
+      state,
+      miner,
+      service: PowService::new(service),
+    }
+  }
+
+  pub fn initialize(&mut self, state: StartupState) -> Result<(), Error> {
+    if state.chain_head.block_num > 1 {
+      debug!("Starting from non-genesis: {}", Printer(&state.chain_head));
+    }
+
+    // Store the public key of this validator, for signing blocks
+    self.state.peer_id = state.local_peer_info.peer_id;
+
+    // Store the chain head id for quick comparisons when required
+    self.state.chain_head = state.chain_head.block_id;
+
+    #[cfg(not(feature = "test-futures"))]
+    {
+      // Set initial on-chain configuration
+      self.reload_configuration()?;
+
+      // Start the inital PoW process with the current chain head
+      self.miner.mine(
+        self.state.chain_head.clone(),
+        self.state.peer_id.clone(),
+        &mut self.service,
+        &self.config,
+      )?;
+
+      // Initialize a new block based on the current chain head
+      self.service.initialize_block(None)?;
+    }
+
+    Ok(())
+  }
+
+  /// Fetch and store on-chain settings as of the current head height
+  pub fn reload_configuration(&mut self) -> Result<(), Error> {
+    self
+      .config
+      .load(&mut self.service, self.state.chain_head.to_owned())
+      .map_err(Into::into)
   }
 }

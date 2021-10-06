@@ -1,9 +1,8 @@
-use sawtooth_sdk::consensus::engine::BlockId;
 use sawtooth_sdk::consensus::engine::Error;
 use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
+use crate::block::BlockId;
 use crate::node::PowService;
 
 const INITIAL_DIFFICULTY: u32 = 22;
@@ -23,12 +22,6 @@ pub struct PowConfig {
 
 impl Default for PowConfig {
   fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl PowConfig {
-  pub fn new() -> Self {
     Self {
       initial_difficulty: INITIAL_DIFFICULTY,
       seconds_between_blocks: SECONDS_BETWEEN_BLOCKS,
@@ -37,8 +30,14 @@ impl PowConfig {
       update_recv_timeout: UPDATE_RECV_TIMEOUT,
     }
   }
+}
 
-  pub fn load(&mut self, service: &PowService, block_id: BlockId) -> Result<(), Error> {
+impl PowConfig {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn load(&mut self, service: &mut PowService, block_id: BlockId) -> Result<(), Error> {
     let keys: Vec<String> = vec![
       conf_key!("seconds_between_blocks").to_string(),
       conf_key!("difficulty_adjustment_block_count").to_string(),

@@ -1,10 +1,15 @@
 use anyhow::Result;
 use byteorder::ReadBytesExt;
+use std::error;
+use std::fmt;
+use std::fmt::Display;
 use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::str::from_utf8;
 use std::str::FromStr;
+
+use crate::primitives::{CCDifficulty, CCNonce, CCTimestamp};
 
 const POW_STR: &str = "PoW";
 const POW_BYTES: &[u8] = b"PoW";
@@ -13,45 +18,48 @@ const GLUE_BYTE: u8 = b':';
 
 pub type ByteTag = [u8; 3];
 
-#[derive(Clone, Copy, Debug)]
+pub type SerializedBlockConsensus = Vec<u8>;
+
+#[derive(Clone, Copy, Debug, Default)]
 pub struct BlockConsensus {
   /// Consensus data byte-prefix
   pub tag: ByteTag,
   /// The proof-of-work challenge difficulty
-  pub difficulty: u32,
+  pub difficulty: CCDifficulty,
   /// The current server time, in UTC seconds
-  pub timestamp: f64,
+  pub timestamp: CCTimestamp,
   /// The proof-of-work nonce
-  pub nonce: u64,
+  pub nonce: CCNonce,
 }
 
 impl BlockConsensus {
   pub fn is_pow_consensus(payload: &[u8]) -> bool {
-    match Self::deserialize(payload) {
-      Ok(consensus) if consensus.is_pow() => true,
-      Ok(_) | Err(_) => false,
-    }
+    matches!(Self::deserialize(payload), Ok(consensus) if consensus.is_pow())
   }
 
-  pub fn serialize(difficulty: u32, timestamp: f64, nonce: u64) -> Vec<u8> {
+  pub fn serialize(difficulty: CCDifficulty, timestamp: CCTimestamp, nonce: CCNonce) -> Vec<u8> {
     format!("{}:{}:{}:{}", POW_STR, difficulty, nonce, timestamp).into_bytes()
   }
 
-  pub fn deserialize<T: AsRef<[u8]>>(slice: T) -> Result<Self> {
+  pub fn deserialize<T: AsRef<[u8]>>(slice: T) -> Result<Self, ConsensusError> {
     let mut reader: Cursor<&[u8]> = Cursor::new(slice.as_ref());
     let mut tag: ByteTag = Default::default();
 
     // read and verify tag
-    reader.read_exact(&mut tag)?;
-    Self::verify_tag(&tag)?;
-
+    if let Err(e) = reader.read_exact(&mut tag) {
+      return Err(ConsensusError::ParsingError(e.to_string()));
+    }
+    if let Err(e) = Self::verify_tag(&tag) {
+      return Err(ConsensusError::NotPoWError(e.to_string()));
+    }
     // skip glue after tag
-    let _: u8 = reader.read_u8()?;
-
+    if let Err(e) = reader.read_u8() {
+      return Err(ConsensusError::ParsingError(e.to_string()));
+    }
+    //order matters
     let difficulty: Vec<u8> = Self::read_sequence(&mut reader, GLUE_BYTE)?;
     let nonce: Vec<u8> = Self::read_sequence(&mut reader, GLUE_BYTE)?;
     let timestamp: Vec<u8> = Self::read_sequence(&mut reader, GLUE_BYTE)?;
-
     Ok(Self {
       tag,
       difficulty: Self::parse_from_utf8("difficulty", &difficulty)?,
@@ -61,19 +69,14 @@ impl BlockConsensus {
   }
 
   pub fn new() -> Self {
-    Self {
-      tag: [0; 3],
-      timestamp: 0.0,
-      difficulty: 0,
-      nonce: 0,
-    }
+    Self::default()
   }
 
   pub fn is_pow(&self) -> bool {
     self.tag == POW_BYTES
   }
 
-  pub(crate) fn read_sequence<R>(reader: &mut R, terminator: u8) -> Result<Vec<u8>>
+  pub(crate) fn read_sequence<R>(reader: &mut R, terminator: u8) -> Result<Vec<u8>, ConsensusError>
   where
     R: Read,
   {
@@ -96,35 +99,54 @@ impl BlockConsensus {
     Ok(sequence)
   }
 
-  pub(crate) fn read_unknown<R>(reader: &mut R) -> Result<Option<u8>>
+  pub(crate) fn read_unknown<R>(reader: &mut R) -> Result<Option<u8>, ConsensusError>
   where
     R: Read,
   {
     match reader.read_u8() {
       Ok(byte) => Ok(Some(byte)),
       Err(error) if error.kind() == ErrorKind::UnexpectedEof => Ok(None),
-      Err(error) => Err(error.into()),
+      Err(error) => Err(ConsensusError::ParsingError(error.to_string())),
     }
   }
 
-  pub(crate) fn parse_from_utf8<T, U>(property: &'static str, slice: T) -> Result<U>
+  pub(crate) fn parse_from_utf8<T, U>(property: &'static str, slice: T) -> Result<U, ConsensusError>
   where
     T: AsRef<[u8]>,
     U: FromStr,
+    <U as FromStr>::Err: Display,
   {
-    let string: &str = match from_utf8(slice.as_ref()) {
-      Ok(string) => string,
-      Err(error) => bail!("Consensus has invalid utf-8: {}", error),
-    };
-
-    string
-      .parse()
-      .map_err(|_| anyhow!("Failed to parse consensus {}", property))
+    match from_utf8(slice.as_ref()) {
+      Ok(string) => string
+        .parse::<U>()
+        .map_err(|e| ConsensusError::ParsingError(format!("{}:{}", property, e.to_string()))),
+      Err(e) => Err(ConsensusError::ParsingError(e.to_string())),
+    }
   }
 
   pub(crate) fn verify_tag(tag: &[u8]) -> Result<()> {
     ensure!(tag == POW_BYTES, "Consensus has invalid tag");
     Ok(())
+  }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ConsensusError {
+  ParsingError(String),
+  NotPoWError(String),
+  InvalidHash(String),
+}
+
+impl error::Error for ConsensusError {}
+
+impl fmt::Display for ConsensusError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    use self::ConsensusError::*;
+    match *self {
+      ParsingError(ref s) => write!(f, "Unparsable Consensus: {}", s),
+      NotPoWError(ref s) => write!(f, "Not PoW Consensus: {}", s),
+      InvalidHash(ref s) => write!(f, "Hash doesn't meet diffulty {}", s),
+    }
   }
 }
 
@@ -153,7 +175,7 @@ mod tests {
     let consensus = b"PoW:30:123:500.555";
     let consensus = BlockConsensus::deserialize(consensus).unwrap();
 
-    assert_eq!(&consensus.tag, b"PoW");
+    assert_eq!(&consensus.tag, POW_BYTES);
     assert_eq!(consensus.difficulty, 30);
     assert_eq!(consensus.nonce, 123);
     assert_eq!(consensus.timestamp, 500.555);
@@ -166,20 +188,29 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus difficulty")]
   fn test_deserialize_invalid_difficulty() {
-    BlockConsensus::deserialize(b"PoW:---:123:500.555").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:---:123:500.555").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("difficulty:invalid digit found in string".into())
+    );
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus nonce")]
   fn test_deserialize_invalid_nonce() {
-    BlockConsensus::deserialize(b"PoW:30:---:500.555").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:30:---:500.555").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("nonce:invalid digit found in string".into())
+    );
   }
 
   #[test]
-  #[should_panic(expected = "Failed to parse consensus timestamp")]
   fn test_deserialize_invalid_timestamp() {
-    BlockConsensus::deserialize(b"PoW:30:123:---").unwrap();
+    let e = BlockConsensus::deserialize(b"PoW:30:123:---").unwrap_err();
+    assert_eq!(
+      e,
+      ConsensusError::ParsingError("timestamp:invalid float literal".into())
+    );
   }
 }

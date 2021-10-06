@@ -1,14 +1,14 @@
-use anyhow::Result;
-use sawtooth_sdk::consensus::engine::Engine;
-use sawtooth_sdk::consensus::engine::Error;
-use sawtooth_sdk::consensus::engine::StartupState;
-use sawtooth_sdk::consensus::engine::Update;
-use sawtooth_sdk::consensus::service::Service;
+use sawtooth_sdk::consensus::{
+  engine::{Engine, Error, StartupState, Update},
+  service::Service,
+};
 use std::sync::mpsc::Receiver;
-use std::sync::mpsc::RecvTimeoutError;
 
-use crate::node::PowConfig;
-use crate::node::PowNode;
+use crate::{
+  futures::{Builder, UpdateStream},
+  node::{PowConfig, PowNode},
+  Duration,
+};
 
 const ENGINE_NAME: &str = "PoW";
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,7 +40,7 @@ impl Engine for PowEngine {
   ) -> Result<(), Error> {
     // Create a new PoW node, using the engine config if one exists.
     let mut node: PowNode = match self.config.take() {
-      Some(config) => PowNode::with_config(service, config),
+      Some(config) => PowNode::with_config(config, service),
       None => PowNode::new(service),
     };
 
@@ -51,26 +51,21 @@ impl Engine for PowEngine {
     // this means we need to handle them explicity.
     if let Err(error) = node.initialize(startup) {
       error!("Init Error: {}", error);
-      return Ok(());
+      return Err(error);
     }
 
-    loop {
-      match updates.recv_timeout(node.config.update_recv_timeout) {
-        Ok(update) => match node.handle_update(update) {
-          Ok(true) => {}
-          Ok(false) => break,
-          Err(error) => error!("Update Error: {}", error),
-        },
-        Err(RecvTimeoutError::Disconnected) => {
-          error!("Disconnected from validator");
-          break;
-        }
-        Err(RecvTimeoutError::Timeout) => {}
-      }
+    let rt = Builder::new_multi_thread()
+      .worker_threads(1)
+      .enable_all()
+      .thread_name("engine-runtime")
+      .build()
+      .expect("Async runtime");
 
-      if let Err(error) = node.try_publish() {
-        error!("Publish Error: {}", error);
-      }
+    {
+      let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
+      let stream = UpdateStream::new(updates, node, time_til_publishing);
+
+      rt.block_on(stream.update_loop());
     }
 
     Ok(())
@@ -81,7 +76,7 @@ impl Engine for PowEngine {
   }
 
   fn version(&self) -> String {
-    let idx = ENGINE_VERSION.rfind(".").expect("PATCH");
+    let idx = ENGINE_VERSION.rfind('.').expect("PATCH");
     ENGINE_VERSION[0..idx].into()
   }
 
