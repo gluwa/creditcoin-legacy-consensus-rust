@@ -25,8 +25,6 @@ RUN USER=root cargo new --bin ccconsensus
 WORKDIR /usr/src/ccconsensus
 
 COPY Cargo.toml Cargo.lock ./
-RUN cargo build --release && \
-    rm src/*.rs
 
 COPY src ./src
 RUN cargo build --release
