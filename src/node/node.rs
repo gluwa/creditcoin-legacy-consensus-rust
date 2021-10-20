@@ -62,7 +62,7 @@ impl PowNode {
       Update::Shutdown => Ok(false),
       Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
-        Ok(false)
+        Ok(true)
       }
     }
   }
