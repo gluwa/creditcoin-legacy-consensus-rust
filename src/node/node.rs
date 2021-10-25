@@ -62,7 +62,7 @@ impl PowNode {
       Update::Shutdown => Ok(false),
       Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
-        Ok(false)
+        Ok(true)
       }
     }
   }
@@ -225,16 +225,16 @@ impl PowNode {
       .unwrap_or_else(|_| panic!("New_header {}", Printer::from(&new_head)));
 
     // Fetch the earliest block from both orphan chains; default to the current head
-    let cur_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or(&cur_header);
-    let new_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or(&new_header);
+    let cur_fork_head: &BlockHeader = cur_chain_orphans.last().unwrap_or(&cur_header);
+    let new_fork_head: &BlockHeader = new_chain_orphans.last().unwrap_or(&new_header);
 
     debug_assert_eq!(cur_fork_head.block_num, new_fork_head.block_num);
 
     // Construct a `ForkChain` to quickly traverse ancestors in pairs.
     // Traverse until:
     //   1. A common ancestor is found
-    //   3. Either block is a genesis block
-    //   2. Either block is NOT a PoW block
+    //   2. Either block is a genesis block
+    //   3. Either block is NOT a PoW block
     let cur_ancestors = BlockAncestors::new(&cur_fork_head.block_id, &mut self.service);
     let (cur_fork_blocks, new_fork_blocks): (Vec<_>, Vec<_>) = cur_ancestors
       .paired_fork_iter(&new_fork_head.block_id)
