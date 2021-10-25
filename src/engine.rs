@@ -5,7 +5,7 @@ use sawtooth_sdk::consensus::{
 use std::sync::mpsc::Receiver;
 
 use crate::{
-  futures::{Builder, UpdateStream},
+  futures::{Builder, Runtime, UpdateStream},
   node::{PowConfig, PowNode},
   Duration,
 };
@@ -39,27 +39,9 @@ impl Engine for PowEngine {
     startup: StartupState,
   ) -> Result<(), Error> {
     // Create a new PoW node, using the engine config if one exists.
-    let mut node: PowNode = match self.config.take() {
-      Some(config) => PowNode::with_config(config, service),
-      None => PowNode::new(service),
-    };
+    let node: PowNode = self.init_node(service, startup)?;
 
-    // Initialize the PoW based on the current startup state received from the
-    // validator - an error here is considered fatal and prevents startup.
-    //
-    // Note: Errors from this call don't propagate due to conflicting types,
-    // this means we need to handle them explicity.
-    if let Err(error) = node.initialize(startup) {
-      error!("Init Error: {}", error);
-      return Err(error);
-    }
-
-    let rt = Builder::new_multi_thread()
-      .worker_threads(1)
-      .enable_all()
-      .thread_name("engine-runtime")
-      .build()
-      .expect("Async runtime");
+    let rt = PowEngine::build_rt();
 
     {
       let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
@@ -82,5 +64,40 @@ impl Engine for PowEngine {
 
   fn additional_protocols(&self) -> Vec<(String, String)> {
     Vec::new()
+  }
+}
+
+impl PowEngine {
+  fn init_node(
+    &mut self,
+    service: Box<dyn Service>,
+    startup: StartupState,
+  ) -> Result<PowNode, Error> {
+    // Create a new PoW node, using the engine config if one exists.
+    let mut node: PowNode = match self.config.take() {
+      Some(config) => PowNode::with_config(config, service),
+      None => PowNode::new(service),
+    };
+
+    // Initialize the PoW based on the current startup state received from the
+    // validator - an error here is considered fatal and prevents startup.
+    //
+    // Note: Errors from this call don't propagate due to conflicting types,
+    // this means we need to handle them explicity.
+    if let Err(error) = node.initialize(startup) {
+      error!("Init Error: {}", error);
+      Err(error)
+    } else {
+      Ok(node)
+    }
+  }
+
+  fn build_rt() -> Runtime {
+    Builder::new_multi_thread()
+      .worker_threads(1)
+      .enable_all()
+      .thread_name("engine-runtime")
+      .build()
+      .expect("Async runtime")
   }
 }
