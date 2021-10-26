@@ -1,11 +1,13 @@
 use crate::consensus::engine::Update;
 use crate::primitives::AtomicFlag;
 
-use crate::futures::event_result::EventResult;
 use crate::futures::*;
 use crate::node::EventPublishResult;
 use futures::pin_mut;
-use futures::{future::Fuse, select, FutureExt};
+use futures::{select, FutureExt};
+
+#[cfg(feature = "test-futures")]
+use std::sync::atomic::AtomicUsize;
 
 use crate::node::PowNode;
 
@@ -16,6 +18,11 @@ pub struct UpdateStream {
   new_chainhead_flag: AtomicFlag,
   time_til_publishing: Duration,
 }
+
+#[cfg(feature = "test-futures")]
+static COUNT_COMMITTER: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "test-futures")]
+use std::println as trace;
 
 impl UpdateStream {
   pub fn new(updates: Receiver<Update>, node: PowNode, time_til_publishing: Duration) -> Self {
@@ -32,6 +39,7 @@ impl UpdateStream {
     }
   }
 
+  #[allow(dead_code)]
   async fn toggle_off_reactor(flag: AtomicFlag) {
     while flag.load(Ordering::Acquire) {
       sleep(Duration::from_millis(10)).await
@@ -66,34 +74,28 @@ impl UpdateStream {
     }
     .fuse();
 
-    //publishing resetter
-    let schedule_timer = Fuse::terminated();
     //commit listener
-    let commiter = UpdateStream::toggle_on_reactor(commit_flag.clone()).fuse();
+    let committer = UpdateStream::toggle_on_reactor(commit_flag.clone()).fuse();
 
-    pin_mut!(scheduler, schedule_timer, updater, commiter);
+    pin_mut!(scheduler, updater, committer);
 
-    //Schedule a publishing timer, when the timer yields, toggle on a flag and spawn a task that waits for the flag to turn off.
-    //Schedule a commit reactor, when the flag turns on, force-reset the publishing timer.
+    //Schedule a publishing timer, when the timer yields, toggle on the publishing flag.
+    //Schedule a commit reactor, when the flag turns on, start a publishing timer.
     loop {
       select! {
         // timer
-        () = scheduler=>{
-          //Publishing time, schedule reset.
-            schedule_timer.set(UpdateStream::toggle_off_reactor(publishing_flag.clone()).fuse());
-        },
-        () = schedule_timer =>{
-          scheduler.set( PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
-        },
-        () = commiter =>{
+        () = scheduler=>{},
+        //new block commited as the new chain head
+        () = committer =>{
+          #[cfg(feature = "test-futures")]
+          trace!("Commiter fut");
+          commit_flag.clone().store(false, Ordering::SeqCst);
           //reset publisher timer
-            scheduler.set( PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
-            schedule_timer.set(Fuse::terminated());
-          //reschedule the reactor;
-            commit_flag.clone().store(false,Ordering::Release);
-            commiter.set(UpdateStream::toggle_on_reactor(commit_flag.clone()).fuse());
+          scheduler.set(PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
+          #[cfg(feature = "test-futures")]
+          COUNT_COMMITTER.fetch_add(1usize, Ordering::Relaxed);
           //force publish TODO?
-
+          committer.set(UpdateStream::toggle_on_reactor(commit_flag.clone()).fuse());
         },
         _ = updater => break,
         complete =>{}
@@ -102,14 +104,21 @@ impl UpdateStream {
   }
 }
 
+#[cfg(feature = "test-futures")]
+static COUNT_PUBLISHED: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "test-futures")]
+static COUNT_UPDATED: AtomicUsize = AtomicUsize::new(0);
+
 impl UpdateStream {
   async fn update_call(&mut self) -> EventResult {
     if self.publishing_flag.load(Ordering::Acquire) {
       match self.node.try_publish() {
         Ok(EventPublishResult::Published) => {
-          trace!("Resetting publishing flag");
           #[cfg(feature = "test-futures")]
-          println!("Resetting publishing flag");
+          {
+            trace!("Resetting publishing flag");
+            COUNT_PUBLISHED.fetch_add(1usize, Ordering::Relaxed);
+          }
           self.publishing_flag.store(false, Ordering::Release);
         }
         Ok(..) => {}
@@ -126,9 +135,17 @@ impl UpdateStream {
     match self.updates.try_recv() {
       Ok(update) => {
         trace!("Incoming update {:?}", update);
+        #[cfg(feature = "test-futures")]
+        COUNT_UPDATED.fetch_add(1usize, Ordering::Relaxed);
         match self.node.handle_update(update) {
-          Ok(true) => EventResult::Continue,
-          Ok(false) => EventResult::Shutdown,
+          Ok(EventResult::Continue) => EventResult::Continue,
+          Ok(EventResult::Shutdown) => EventResult::Shutdown,
+          Ok(EventResult::Restart) => {
+            #[cfg(feature = "test-futures")]
+            trace!("restart publishing");
+            self.new_chainhead_flag.store(true, Ordering::SeqCst);
+            EventResult::Continue
+          }
           Err(error) => {
             error!("Update Error: {}", error);
             EventResult::Continue
@@ -161,63 +178,82 @@ mod tests {
   use std::sync::mpsc::channel;
   use std::thread;
 
-  #[test]
-  fn test_update_future() {
-    let (sx, rx) = channel::<Update>();
-    let t = Update::BlockCommit(vec![]);
-    let _ = sx.send(t);
-    let t = Update::BlockInvalid(vec![]);
-    let _ = sx.send(t);
-    let t = Update::BlockValid(vec![]);
-    let _ = sx.send(t);
-    let t = Update::Shutdown;
-    let _ = sx.send(t);
-
-    let mut engine = PowEngine::new();
-    let service = Box::new(MockService {});
-
-    //dummy block
-    let chain_head = Block::default();
-    let startup_state: StartupState = StartupState {
-      chain_head,
-      peers: vec![],
-      local_peer_info: PeerInfo::default(),
+  macro_rules! one_of_each_update {
+    ($sx:ident, $update: ident) => {
+      let _ = $sx.send(Update::$update(vec![]));
     };
+    ($sx:ident, $update: ident, $($rest:ident),+) => {
+      let _ = $sx.send(Update::$update(vec![]));
+      one_of_each_update!($sx, $($rest),+)
+      };
+  }
 
-    engine
-      .start(rx, service as Box<dyn Service>, startup_state)
-      .expect("start")
+  macro_rules! simple_engine_loop {
+    ($sx:ident, $rx:ident, $message_pattern:expr, $($updates:ident),* ) => {
+      one_of_each_update!($sx, $($updates),*);
+
+      thread::spawn(move || $message_pattern);
+
+      let mut engine = PowEngine::new();
+      let service = Box::new(MockService {});
+
+      //dummy block
+      let chain_head = Block::default();
+      let startup_state: StartupState = StartupState {
+        chain_head,
+        peers: vec![],
+        local_peer_info: PeerInfo::default(),
+      };
+
+      engine
+        .start($rx, service as Box<dyn Service>, startup_state)
+        .expect("start");
+    };
   }
 
   #[test]
-  fn test_update_stream_future() {
+  ///The event loop processed `COUNT_UPDATED` events.
+  /// Will fail if run in bulk due to the shared static update event counter.
+  fn singled_out_update_events() {
     let (sx, rx) = channel::<Update>();
-    let t = Update::BlockCommit(vec![]);
-    let _ = sx.send(t);
-    let t = Update::BlockInvalid(vec![]);
-    let _ = sx.send(t);
-    let t = Update::BlockValid(vec![]);
-    let _ = sx.send(t);
+    simple_engine_loop!(
+      sx,
+      rx,
+      {
+        let _ = sx.send(Update::Shutdown);
+      },
+      PeerDisconnected,
+      BlockValid,
+      BlockInvalid,
+      BlockCommit
+    );
 
-    thread::spawn(move || {
-      thread::sleep(Duration::from_secs(5));
-      let t = Update::Shutdown;
-      let _ = sx.send(t);
-    });
+    assert_eq!(COUNT_UPDATED.load(Ordering::Acquire), 5);
+  }
 
-    let mut engine = PowEngine::new();
-    let service = Box::new(MockService {});
+  #[test]
+  ///The event loop attempted to publish `COUNT_PUBLISHED` and started the publisher interval `COUNT_COMMITTER` times.
+  fn test_publishing_event() {
+    let (sx, rx) = channel::<Update>();
+    simple_engine_loop!(
+      sx,
+      rx,
+      {
+        let _ = sx.send(Update::BlockCommit(vec![]));
+        //allow time for another publication
+        thread::sleep(Duration::from_secs(3));
+        let _ = sx.send(Update::BlockCommit(vec![]));
+        //allow time for another publication
+        thread::sleep(Duration::from_secs(3));
+        let _ = sx.send(Update::Shutdown);
+      },
+      BlockValid,
+      BlockValid,
+      BlockValid,
+      BlockValid
+    );
 
-    //dummy block
-    let chain_head = Block::default();
-    let startup_state: StartupState = StartupState {
-      chain_head,
-      peers: vec![],
-      local_peer_info: PeerInfo::default(),
-    };
-
-    engine
-      .start(rx, service as Box<dyn Service>, startup_state)
-      .expect("start")
+    assert_eq!(COUNT_PUBLISHED.load(Ordering::Acquire), 2);
+    assert_eq!(COUNT_COMMITTER.load(Ordering::Acquire), 2);
   }
 }
