@@ -8,7 +8,7 @@ use sawtooth_sdk::consensus::{
 use std::borrow::Cow;
 
 use crate::node::{PowConfig, PowService, PowState};
-use crate::{block::BlockPrinter as Printer, miner::Miner};
+use crate::{block::BlockPrinter as Printer, futures::EventResult, miner::Miner};
 #[cfg(not(feature = "test-futures"))]
 use crate::{
   block::{Block, BlockAncestors, BlockConsensus, BlockHeader, BlockId, ConsensusError},
@@ -30,19 +30,18 @@ pub struct PowNode {
 
 #[cfg(feature = "test-futures")]
 impl PowNode {
-  pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
-    let (msg, res) = match update {
-      Update::BlockNew(..) => ("BlockNew", Ok(true)),
-      Update::BlockValid(..) => ("BlockValid", Ok(true)),
-      Update::BlockInvalid(..) => ("BlockInvalid", Ok(true)),
-      Update::BlockCommit(..) => ("BlockCommit", Ok(true)),
-      Update::Shutdown => ("Shutdown", Ok(false)),
+  pub fn handle_update(&mut self, update: Update) -> Result<EventResult, Error> {
+    let (_, res) = match update {
+      Update::BlockNew(..) => ("BlockNew", Ok(EventResult::Continue)),
+      Update::BlockValid(..) => ("BlockValid", Ok(EventResult::Continue)),
+      Update::BlockInvalid(..) => ("BlockInvalid", Ok(EventResult::Continue)),
+      Update::BlockCommit(..) => ("BlockCommit", Ok(EventResult::Restart)),
+      Update::Shutdown => ("Shutdown", Ok(EventResult::Shutdown)),
       Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
-        ("PeerGenericUpdate", Ok(false))
+        ("PeerGenericUpdate", Ok(EventResult::Continue))
       }
     };
-    println!("{}", msg);
     res
   }
 
@@ -53,16 +52,16 @@ impl PowNode {
 
 #[cfg(not(feature = "test-futures"))]
 impl PowNode {
-  pub fn handle_update(&mut self, update: Update) -> Result<bool, Error> {
+  pub fn handle_update(&mut self, update: Update) -> Result<EventResult, Error> {
     match update {
       Update::BlockNew(block) => self.on_block_new(block),
       Update::BlockValid(block_id) => self.on_block_valid(block_id),
       Update::BlockInvalid(block_id) => self.on_block_invalid(block_id),
       Update::BlockCommit(block_id) => self.on_block_commit(block_id),
-      Update::Shutdown => Ok(false),
+      Update::Shutdown => Ok(EventResult::Shutdown),
       Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
-        Ok(true)
+        Ok(EventResult::Continue)
       }
     }
   }
@@ -73,13 +72,13 @@ impl PowNode {
   /// The block has been verified by the validator, so mark it as validated in the log and
   /// attempt to handle the block.
 
-  fn on_block_new(&mut self, block: Block) -> Result<bool, Error> {
+  fn on_block_new(&mut self, block: Block) -> Result<EventResult, Error> {
     debug!("Checking block consensus: {}", Printer(&block));
 
     // This should never happen under normal circumstances
     if block.previous_id == NULL_BLOCK_IDENTIFIER {
       error!("Received Update::BlockNew for genesis block!");
-      return Ok(true);
+      return Ok(EventResult::Continue);
     }
 
     let header: Result<(), ConsensusError> =
@@ -99,11 +98,11 @@ impl PowNode {
       }
     }
 
-    Ok(true)
+    Ok(EventResult::Continue)
   }
 
   /// Called when a block check succeeds
-  fn on_block_valid(&mut self, block_id: BlockId) -> Result<bool, Error> {
+  fn on_block_valid(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
     let cur_head: Block = self.service.get_block(&self.state.chain_head)?;
     let new_head: Block = self.service.get_block(&block_id)?;
 
@@ -116,20 +115,19 @@ impl PowNode {
     self.compare_forks(cur_head, new_head)?;
     //check for fork resolution and commit block?
 
-    Ok(true)
+    Ok(EventResult::Continue)
   }
 
   /// Called when a block check fails
-  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<bool, Error> {
+  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
     // Mark the block as failed by consensus, let the validator know
     self.service.fail_block(block_id)?;
 
-    Ok(true)
+    Ok(EventResult::Continue)
   }
 
   /// Called when a block commit completes
-  ///Revisit on block commit, adjust publishing timer
-  fn on_block_commit(&mut self, block_id: BlockId) -> Result<bool, Error> {
+  fn on_block_commit(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
     debug!("Chain head updated to {}", dbg_hex!(&block_id));
 
     // Stop adding batches to the current block and abandon it.
@@ -157,7 +155,7 @@ impl PowNode {
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
 
-    Ok(true)
+    Ok(EventResult::Restart)
   }
 
   fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {

@@ -1,9 +1,9 @@
 /*!
 A future that will flag the publishing time using an atomic construct.
 */
-use tokio::time::Sleep;
-
 use crate::futures::*;
+#[cfg(feature = "test-futures")]
+use std::println as trace;
 
 ///schedule a task to mark publishing time, after publishing, reschedule a new publishing future.
 pub struct PublishSchedulerFuture {
@@ -34,9 +34,8 @@ impl Future for PublishSchedulerFuture {
       return Poll::Pending;
     }
 
-    trace!("Publishing time!");
     #[cfg(feature = "test-futures")]
-    println!("Publishing time!");
+    trace!("Publishing time!");
     //set atomic
     flag.store(true, Ordering::Release);
     Poll::Ready(())
