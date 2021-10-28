@@ -3,6 +3,7 @@ mod publish_future;
 mod update_stream;
 
 pub use crate::primitives::{Arc, AtomicBool, AtomicFlag};
+pub use crate::Duration;
 pub use event_result::EventResult;
 pub use futures::stream;
 pub use std::boxed::Box;
@@ -12,7 +13,6 @@ pub use std::pin::Pin;
 pub use std::sync::atomic::Ordering;
 pub use std::sync::mpsc::{Receiver, TryRecvError};
 pub use std::task::Poll;
-pub use std::time::Duration;
 pub use tokio::runtime;
 pub use tokio::runtime::Builder;
 pub use tokio::runtime::Runtime;

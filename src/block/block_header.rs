@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use crate::block::{Block, BlockConsensus, ConsensusError};
 use crate::primitives::H256;
-use crate::work::{digest_score, get_hasher};
+use crate::work::get_hasher;
 use crate::work::{is_valid_proof_of_work, mkhash};
 
 #[derive(Clone)]
@@ -59,13 +59,14 @@ impl<'a> BlockHeader<'a> {
       self.consensus.nonce,
     );
 
-    if is_valid_proof_of_work(&hash, self.consensus.difficulty) {
+    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.difficulty);
+
+    if is_valid {
       Ok(())
     } else {
       Err(ConsensusError::InvalidHash(format!(
         "({}/ diff:{})",
-        digest_score(&hash),
-        self.consensus.difficulty
+        difficulty, self.consensus.difficulty
       )))
     }
   }

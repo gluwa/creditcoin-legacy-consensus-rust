@@ -284,7 +284,7 @@ impl PowNode {
     //early exit optimization
     if self.state.guards.contains(&Guard::Finalized) {
       //A block has not been commited yet.
-      //While we are still waiting for a block to be commited skip publishing logic.
+      //While we are still waiting for a block to be committed skip publishing logic.
       return Ok(EventPublishResult::Pending);
     }
 
@@ -326,9 +326,6 @@ impl PowNode {
 
           self.state.guards.remove(&Guard::Consensus);
           self.state.guards.remove(&Guard::Summarized);
-
-          // Reset the miner state
-          self.miner.reset();
 
           return Ok(EventPublishResult::Published);
         }

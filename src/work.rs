@@ -38,8 +38,9 @@ pub fn mkhash_into(
   output.copy_from_slice(&*hasher.finalize_reset());
 }
 
-pub fn is_valid_proof_of_work(hash: &H256, difficulty: CCDifficulty) -> bool {
-  digest_score(hash) >= difficulty
+pub fn is_valid_proof_of_work(hash: &H256, difficulty: CCDifficulty) -> (bool, CCDifficulty) {
+  let digest = digest_score(hash);
+  (digest >= difficulty, digest)
 }
 
 pub fn get_difficulty(
