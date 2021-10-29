@@ -91,6 +91,7 @@ impl UpdateStream {
           trace!("Commiter fut");
           commit_flag.clone().store(false, Ordering::SeqCst);
           //reset publisher timer
+          publishing_flag.clone().store(false,Ordering::Release);
           scheduler.set(PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
           #[cfg(feature = "test-futures")]
           COUNT_COMMITTER.fetch_add(1usize, Ordering::Relaxed);
