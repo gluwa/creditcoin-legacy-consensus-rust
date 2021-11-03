@@ -1,5 +1,5 @@
 pub enum EventResult {
   Continue,
-  Restart,
+  Restart(bool),
   Shutdown,
 }

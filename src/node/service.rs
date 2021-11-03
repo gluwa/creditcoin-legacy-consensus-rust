@@ -87,8 +87,12 @@ pub mod tests {
     fn fail_block(&mut self, _block_id: BlockId) -> Result<(), Error> {
       Ok(())
     }
-    fn get_blocks(&mut self, _block_ids: Vec<BlockId>) -> Result<HashMap<BlockId, Block>, Error> {
-      Ok(Default::default())
+    fn get_blocks(&mut self, block_ids: Vec<BlockId>) -> Result<HashMap<BlockId, Block>, Error> {
+      let mut map = HashMap::new();
+      for k in block_ids {
+        map.insert(k, Block::default());
+      }
+      Ok(map)
     }
     fn get_chain_head(&mut self) -> Result<Block, Error> {
       Ok(Default::default())

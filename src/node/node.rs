@@ -24,7 +24,7 @@ pub struct PowNode {
   pub config: PowConfig,
   pub service: PowService,
   state: PowState,
-  #[cfg_attr(test, allow(dead_code))]
+  #[cfg_attr(feature = "test-futures", allow(dead_code))]
   miner: Miner,
 }
 
@@ -35,7 +35,7 @@ impl PowNode {
       Update::BlockNew(..) => ("BlockNew", Ok(EventResult::Continue)),
       Update::BlockValid(..) => ("BlockValid", Ok(EventResult::Continue)),
       Update::BlockInvalid(..) => ("BlockInvalid", Ok(EventResult::Continue)),
-      Update::BlockCommit(..) => ("BlockCommit", Ok(EventResult::Restart)),
+      Update::BlockCommit(..) => ("BlockCommit", Ok(EventResult::Restart(true))),
       Update::Shutdown => ("Shutdown", Ok(EventResult::Shutdown)),
       Update::PeerConnected(..) | Update::PeerDisconnected(..) | Update::PeerMessage(..) => {
         // ignore peer-related messages
@@ -112,8 +112,8 @@ impl PowNode {
       Printer(&new_head),
     );
 
+    //fork resolution and commit block
     self.compare_forks(cur_head, new_head)?;
-    //check for fork resolution and commit block?
 
     Ok(EventResult::Continue)
   }
@@ -130,19 +130,34 @@ impl PowNode {
   fn on_block_commit(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
     debug!("Chain head updated to {}", dbg_hex!(&block_id));
 
-    // Stop adding batches to the current block and abandon it.
+    let mut did_publish = false;
+    //don't try to publish if we have already published.
     if !self.state.guards.contains(&Guard::Finalized) {
-      self.service.cancel_block()?;
+      //try to publish opportunistically
+      match self.try_publish() {
+        Ok(EventPublishResult::Published) => {
+          trace!("Eager-published");
+          did_publish = true;
+        }
+        Ok(EventPublishResult::Pending) => {
+          trace!("Unsuccessful eager-publishing");
+        }
+        Err(e) => {
+          trace!("Failed eager-publishing with Error: {}", e);
+        }
+      }
     }
 
-    // Update local chain head reference
-    self.state.chain_head = block_id.to_owned();
+    if !self.state.guards.contains(&Guard::Finalized) {
+      // Stop adding batches to the current block and abandon it.
+      self.service.cancel_block()?;
+    }
 
     // Refresh on-chain configuration
     self.reload_configuration()?;
 
-    // Remove the publishing guard, allow publishing a new block when appropriate
-    self.state.guards.remove(&Guard::Finalized);
+    // Remove publishing guards, allows starting the publishing state machine.
+    self.state.guards.clear();
 
     // Start the PoW process for this block
     self.miner.mine(
@@ -155,7 +170,7 @@ impl PowNode {
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
 
-    Ok(EventResult::Restart)
+    Ok(EventResult::Restart(did_publish))
   }
 
   fn compare_forks(&mut self, cur_head: Block, new_head: Block) -> Result<(), Error> {
@@ -172,7 +187,7 @@ impl PowNode {
       loop {
         if fork_block.previous_id == cur_head.block_id {
           debug!("Committing new block (consensus) {}", Printer(&new_head));
-          self.service.commit_block(new_head.block_id)?;
+          self.wrapper_service_commit_block(new_head.block_id)?;
           break;
         } else if !BlockConsensus::is_pow_consensus(&fork_block.payload) {
           // also happens with genesis blocks
@@ -187,7 +202,7 @@ impl PowNode {
       && new_head.previous_id == cur_head.block_id
     {
       debug!("Committing new block (next) {}", Printer(&new_head));
-      self.service.commit_block(new_head.block_id)?;
+      self.wrapper_service_commit_block(new_head.block_id)?;
     } else {
       self.resolve_fork(cur_head, new_head)?;
     }
@@ -264,7 +279,7 @@ impl PowNode {
         Printer(&new_head),
       );
 
-      self.service.commit_block(new_head.block_id)?;
+      self.wrapper_service_commit_block(new_head.block_id)?;
     } else {
       debug!(
         "Ignoring new fork (work {}/{}) {}",
@@ -279,12 +294,12 @@ impl PowNode {
     Ok(())
   }
 
+  /// Is reentrant. Can be retried at any publishing state.
   pub fn try_publish(&mut self) -> Result<EventPublishResult, Error> {
     // If we already published at this height, exit early.
-    //early exit optimization
     if self.state.guards.contains(&Guard::Finalized) {
       //A block has not been commited yet.
-      //While we are still waiting for a block to be committed skip publishing logic.
+      //While we are still waiting for a block to be committed
       return Ok(EventPublishResult::Pending);
     }
 
@@ -340,6 +355,11 @@ impl PowNode {
     }
 
     unreachable!();
+  }
+
+  fn wrapper_service_commit_block(&mut self, block_id: BlockId) -> Result<(), Error> {
+    self.state.chain_head = block_id.to_owned();
+    self.service.commit_block(block_id)
   }
 }
 
@@ -397,5 +417,35 @@ impl PowNode {
       .config
       .load(&mut self.service, self.state.chain_head.to_owned())
       .map_err(Into::into)
+  }
+}
+
+#[cfg(all(test, not(feature = "test-futures")))]
+mod tests {
+
+  use super::*;
+  use crate::node::tests::MockService;
+  #[test]
+  fn if_already_published_dont_publish_on_block_commit() -> Result<(), Error> {
+    let state = {
+      let mut state = PowState::new();
+      state.peer_id = (&b"ffffffffffffffff"[..]).into();
+      state
+    };
+    let mut node = PowNode {
+      config: PowConfig::new(),
+      service: PowService::new(Box::new(MockService {})),
+      state,
+      miner: Miner::default(),
+    };
+    //publishing finished successfully
+    node.state.guards.insert(Guard::Finalized);
+    let blockid = &b"ffffffffffffffff"[..];
+    let res = node.on_block_commit(blockid.into())?;
+    if let EventResult::Restart(published) = res {
+      assert!(!published);
+    }
+
+    Ok(())
   }
 }
