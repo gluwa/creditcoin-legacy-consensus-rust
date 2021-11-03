@@ -90,8 +90,9 @@ impl UpdateStream {
           #[cfg(feature = "test-futures")]
           trace!("Commiter fut");
           commit_flag.clone().store(false, Ordering::SeqCst);
-          //reset publisher timer
+          //publishing timer kicked in but publishing was unsuccessful, and a new chain head arrived.
           publishing_flag.clone().store(false,Ordering::Release);
+          //reset publisher timer
           scheduler.set(PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
           #[cfg(feature = "test-futures")]
           COUNT_COMMITTER.fetch_add(1usize, Ordering::Relaxed);
@@ -122,7 +123,7 @@ impl UpdateStream {
           }
           self.publishing_flag.store(false, Ordering::Release);
         }
-        Ok(..) => {}
+        Ok(EventPublishResult::Pending) => {}
         Err(e) => {
           warn!(
             "Publishing Error {}. Consensus event handler is stopping.",
@@ -141,10 +142,13 @@ impl UpdateStream {
         match self.node.handle_update(update) {
           Ok(EventResult::Continue) => EventResult::Continue,
           Ok(EventResult::Shutdown) => EventResult::Shutdown,
-          Ok(EventResult::Restart) => {
+          Ok(EventResult::Restart(eager_publish)) => {
             #[cfg(feature = "test-futures")]
             trace!("restart publishing");
             self.new_chainhead_flag.store(true, Ordering::SeqCst);
+            if eager_publish {
+              self.publishing_flag.store(false, Ordering::Release)
+            }
             EventResult::Continue
           }
           Err(error) => {
@@ -257,4 +261,22 @@ mod tests {
     assert_eq!(COUNT_PUBLISHED.load(Ordering::Acquire), 2);
     assert_eq!(COUNT_COMMITTER.load(Ordering::Acquire), 2);
   }
+
+  /// Try to publish, leave it incomplete, then on_block_commit, finishes it,
+  /// test that the publishing event is properly reset and try_publish is not retried.
+  #[allow(dead_code)]
+  fn partial_publishing_then_eager_publishing() {}
+
+  ///it is publishing time, publishing doesn't finish, on_block_commit runs, eager_publish also doesn't finish.
+  /// test that the publishing timer is properly reset.
+  #[allow(dead_code)]
+  fn publisher_timer_resets_after_timed_and_eager_publishing_fail() {}
+
+  /// publishing timer will activate just as on_block_commit is being executed.
+  /// Unluckily the tasks executed go in the following order,
+  /// on_block_commit -> publishing_timer -> updater -> committer
+  /// The miner is reset, publishing will be tried, a consensus won't be ready, the committer reesets publishing.
+  /// Relies on the consensus not finding a valid solution on time.
+  #[allow(dead_code)]
+  fn publisher_timer_slightly_ahead_of_committer_event() {}
 }
