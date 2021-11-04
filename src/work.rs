@@ -62,16 +62,12 @@ fn calculate_difficulty(
   config: &PowConfig,
 ) -> Result<CCDifficulty> {
   if is_tuning_block(header, config) {
-    if let Some(difficulty) = calculate_tuning_difficulty(header, timestamp, service, config)? {
-      return Ok(difficulty);
-    }
+    calculate_tuning_difficulty(header, timestamp, service, config)
   } else if is_adjustment_block(header, config) {
-    if let Some(difficulty) = calculate_adjustment_difficulty(header, timestamp, service, config)? {
-      return Ok(difficulty);
-    }
+    calculate_adjustment_difficulty(header, timestamp, service, config)
+  } else {
+    Ok(header.consensus.difficulty)
   }
-
-  Ok(header.consensus.difficulty)
 }
 
 fn calculate_tuning_difficulty(
@@ -79,7 +75,7 @@ fn calculate_tuning_difficulty(
   timestamp: CCTimestamp,
   service: &mut PowService,
   config: &PowConfig,
-) -> Result<Option<CCDifficulty>> {
+) -> Result<CCDifficulty> {
   let (time_taken, time_expected) = elapsed_time(
     header,
     service,
@@ -91,11 +87,11 @@ fn calculate_tuning_difficulty(
   let difficulty: u32 = header.consensus.difficulty;
 
   if time_taken < time_expected && difficulty < 255 {
-    Ok(Some(difficulty + 1))
+    Ok(difficulty + 1)
   } else if time_taken > time_expected && difficulty > 0 {
-    Ok(Some(difficulty - 1))
+    Ok(difficulty - 1)
   } else {
-    Ok(None)
+    Ok(difficulty)
   }
 }
 
@@ -104,7 +100,7 @@ fn calculate_adjustment_difficulty(
   timestamp: CCTimestamp,
   service: &mut PowService,
   config: &PowConfig,
-) -> Result<Option<CCDifficulty>> {
+) -> Result<CCDifficulty> {
   let (time_taken, time_expected) = elapsed_time(
     header,
     service,
@@ -116,11 +112,11 @@ fn calculate_adjustment_difficulty(
   let difficulty: u32 = header.consensus.difficulty;
 
   if time_taken < time_expected / 2.0 && difficulty < 255 {
-    Ok(Some(difficulty + 1))
+    Ok(difficulty + 1)
   } else if time_taken > time_expected * 2.0 && difficulty > 0 {
-    Ok(Some(difficulty - 1))
+    Ok(difficulty - 1)
   } else {
-    Ok(None)
+    Ok(difficulty)
   }
 }
 
