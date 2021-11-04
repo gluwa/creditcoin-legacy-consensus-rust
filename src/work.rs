@@ -139,7 +139,7 @@ fn elapsed_time(
   total_count: u64,
   expected_interval: u64,
 ) -> Result<(f64, f64)> {
-  let mut count: u64 = 2;
+  let mut count: u64 = 1;
   let mut previous_time: f64 = header.consensus.timestamp;
   let mut block_id: Cow<BlockId> = Cow::Borrowed(&header.previous_id);
 
