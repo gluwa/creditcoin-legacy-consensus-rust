@@ -7,12 +7,15 @@ use sawtooth_sdk::consensus::{
 #[cfg(not(feature = "test-futures"))]
 use std::borrow::Cow;
 
-use crate::node::{PowConfig, PowService, PowState};
 use crate::{block::BlockPrinter as Printer, futures::EventResult, miner::Miner};
 #[cfg(not(feature = "test-futures"))]
 use crate::{
-  block::{Block, BlockAncestors, BlockConsensus, BlockHeader, BlockId, ConsensusError},
+  block::{Block, BlockAncestors, BlockConsensus, BlockHeader, BlockId},
   node::Guard,
+};
+use crate::{
+  node::{PowConfig, PowService, PowState},
+  work::get_difficulty,
 };
 
 use super::EventPublishResult;
@@ -66,6 +69,15 @@ impl PowNode {
     }
   }
 
+  fn on_block_new_error_handler(
+    &mut self,
+    block: Block,
+    error: impl std::error::Error,
+  ) -> Result<(), Error> {
+    debug!("Failed consensus check: {} - {:?}", Printer(&block), error);
+    self.service.fail_block(block.block_id)
+  }
+
   /// Called when a new block is received; call for validation or fail the block.
   /// Handle a `BlockValid` update from the Validator
   ///
@@ -73,30 +85,77 @@ impl PowNode {
   /// attempt to handle the block.
 
   fn on_block_new(&mut self, block: Block) -> Result<EventResult, Error> {
-    debug!("Checking block consensus: {}", Printer(&block));
-
     // This should never happen under normal circumstances
     if block.previous_id == NULL_BLOCK_IDENTIFIER {
       error!("Received Update::BlockNew for genesis block!");
       return Ok(EventResult::Continue);
     }
 
-    let header: Result<(), ConsensusError> =
-      BlockHeader::borrowed(&block).and_then(|header| header.validate());
+    debug!("Checking block consensus: {}", Printer(&block));
 
-    // Ensure the block consensus is valid
-    match header {
-      Ok(()) => {
-        debug!("Passed consensus check: {}", Printer(&block));
+    let header = match BlockHeader::borrowed(&block) {
+      // Ensure the block consensus is valid
+      Ok(h) => match h.validate() {
+        Ok(header) => header,
+        Err(e) => {
+          self.on_block_new_error_handler(block, e)?;
+          return Ok(EventResult::Continue);
+        }
+      },
+      Err(e) => {
+        self.on_block_new_error_handler(block, e)?;
+        return Ok(EventResult::Continue);
+      }
+    };
 
-        // Tell the validator to validate the block
-        self.service.check_blocks(vec![block.block_id])?;
+    // Ensure that the minimum difficulty has been reached.
+
+    // build Predecessor header
+    let pred_header = match self.service.get_block(&block.previous_id) {
+      Ok(block) => match BlockHeader::owned(block.clone()) {
+        Ok(h) => h,
+        Err(e) => {
+          self.on_block_new_error_handler(block, e)?;
+          return Ok(EventResult::Continue);
+        }
+      },
+      Err(e) => {
+        self.on_block_new_error_handler(block, e)?;
+        return Ok(EventResult::Continue);
       }
-      Err(error) => {
-        debug!("Failed consensus check: {} - {:?}", Printer(&block), error);
-        self.service.fail_block(block.block_id)?;
-      }
+    };
+
+    let config =
+      PowConfig::consensus_settings_view(&mut self.service, pred_header.block_id.clone())?;
+
+    /* */
+    //
+    let expected_min_diff = get_difficulty(
+      &pred_header,
+      header.consensus.timestamp,
+      &mut self.service,
+      &config,
+    );
+
+    if header.consensus.difficulty < expected_min_diff {
+      debug!(
+        "Failed consensus min diff check: curr {:?} - pred {:?}",
+        &header, &pred_header
+      );
+
+      self.service.fail_block(block.block_id)?;
+      return Ok(EventResult::Continue);
     }
+
+    trace!(
+      "Consensus min diff check: curr {:?} - pred {:?}",
+      &header,
+      &pred_header
+    );
+
+    debug!("Passed consensus check: {}", Printer(&block));
+    // Request block validation
+    self.service.check_blocks(vec![block.block_id])?;
 
     Ok(EventResult::Continue)
   }

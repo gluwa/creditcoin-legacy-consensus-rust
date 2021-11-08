@@ -47,7 +47,7 @@ impl Miner {
     config: &PowConfig,
   ) -> Result<(), Error> {
     let block: Block = service.get_block(&block_id)?;
-    let header: BlockHeader = BlockHeader::borrowed(&block).expect("Block Header");
+    let header: BlockHeader = BlockHeader::borrowed(&block).expect("Block head Header");
 
     let timestamp: f64 = utc_seconds_f64();
     let difficulty: u32 = get_difficulty(&header, timestamp, service, config);

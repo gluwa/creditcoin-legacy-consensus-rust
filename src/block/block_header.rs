@@ -39,16 +39,16 @@ impl<'a> BlockHeader<'a> {
     2u64.pow(self.consensus.difficulty)
   }
 
-  pub fn validate(&self) -> Result<(), ConsensusError> {
+  pub fn validate(self) -> Result<Self, ConsensusError> {
     // The genesis block is always valid
     if self.is_genesis() {
-      return Ok(());
+      return Ok(self);
     }
 
     // The block must pass the difficulty filter
     self.validate_proof_of_work()?;
 
-    Ok(())
+    Ok(self)
   }
 
   fn validate_proof_of_work(&self) -> Result<(), ConsensusError> {
