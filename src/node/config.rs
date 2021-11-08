@@ -38,13 +38,49 @@ impl PowConfig {
     Self::default()
   }
 
-  pub fn load(&mut self, service: &mut PowService, block_id: BlockId) -> Result<(), Error> {
-    let keys: Vec<String> = vec![
+  fn consensus_chain_settings() -> Vec<String> {
+    vec![
       conf_key!("seconds_between_blocks").to_string(),
       conf_key!("difficulty_adjustment_block_count").to_string(),
       conf_key!("difficulty_tuning_block_count").to_string(),
       conf_key!("initial_difficulty").to_string(),
-    ];
+    ]
+  }
+
+  pub fn consensus_settings_view(
+    service: &mut PowService,
+    block_id: BlockId,
+  ) -> Result<Self, Error> {
+    let keys = Self::consensus_chain_settings();
+    let settings: HashMap<String, String> = service.get_settings(block_id, keys)?;
+    let mut out = Self::default();
+
+    #[allow(unused_macros)]
+    macro_rules! insert_settings {
+      ($out:ident,$map:ident,$($settings_literals:ident),*) => {
+        $(
+        if let Some(e) = $map.get(conf_key!(stringify!($settings_literals))).and_then(|s| s.parse().ok())
+        {
+          $out.$settings_literals = e;
+        }
+        )*
+      };
+    }
+
+    insert_settings!(
+      out,
+      settings,
+      seconds_between_blocks,
+      difficulty_adjustment_block_count,
+      difficulty_tuning_block_count,
+      initial_difficulty
+    );
+
+    Ok(out)
+  }
+
+  pub fn load(&mut self, service: &mut PowService, block_id: BlockId) -> Result<(), Error> {
+    let keys = Self::consensus_chain_settings();
 
     let settings: HashMap<String, String> = service.get_settings(block_id, keys)?;
     let mut changes: bool = false;
