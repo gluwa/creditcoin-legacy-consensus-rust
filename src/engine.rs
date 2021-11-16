@@ -74,22 +74,17 @@ impl PowEngine {
     startup: StartupState,
   ) -> Result<PowNode, Error> {
     // Create a new PoW node, using the engine config if one exists.
-    let mut node: PowNode = match self.config.take() {
+    let node: PowNode = match self.config.take() {
       Some(config) => PowNode::with_config(config, service),
       None => PowNode::new(service),
     };
 
     // Initialize the PoW based on the current startup state received from the
     // validator - an error here is considered fatal and prevents startup.
-    //
-    // Note: Errors from this call don't propagate due to conflicting types,
-    // this means we need to handle them explicity.
-    if let Err(error) = node.initialize(startup) {
-      error!("Init Error: {}", error);
-      Err(error)
-    } else {
-      Ok(node)
-    }
+    node.initialize(startup).map_err(|err| {
+      error!("Failed to initialize PoW engine: {:?}", err);
+      err
+    })
   }
 
   fn build_rt() -> Runtime {
