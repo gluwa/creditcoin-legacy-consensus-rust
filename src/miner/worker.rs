@@ -67,7 +67,7 @@ impl Worker {
     challenge: Challenge,
     rng: &mut ThreadRng,
   ) -> (Challenge, CCNonce) {
-    &channel.send(MessageToMiner::Started);
+    let _ = channel.send(MessageToMiner::Started);
     (challenge, rng.gen_range(0..u64::MAX))
   }
 
