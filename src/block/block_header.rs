@@ -65,7 +65,7 @@ impl<'a> BlockHeader<'a> {
       Ok(())
     } else {
       Err(ConsensusError::InvalidHash(format!(
-        "({}/ diff:{})",
+        "({} / diff:{})",
         difficulty, self.consensus.difficulty
       )))
     }
