@@ -439,7 +439,7 @@ impl PowNode {
     }
   }
 
-  pub fn initialize(&mut self, state: StartupState) -> Result<(), Error> {
+  pub fn initialize(mut self, state: StartupState) -> Result<Self, Error> {
     if state.chain_head.block_num > 1 {
       debug!("Starting from non-genesis: {}", Printer(&state.chain_head));
     }
@@ -467,7 +467,7 @@ impl PowNode {
       self.service.initialize_block(None)?;
     }
 
-    Ok(())
+    Ok(self)
   }
 
   /// Fetch and store on-chain settings as of the current head height
