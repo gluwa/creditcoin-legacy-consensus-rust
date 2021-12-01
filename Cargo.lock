@@ -22,9 +22,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.44"
+version = "1.0.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61604a8f862e1d5c3229fdd78f8b02c68dcf73a4c4b05fd636d12240aaa242c1"
+checksum = "8b26702f315f53b6071259e15dd9d64528213b44d61de1ec926eca7715d62203"
 
 [[package]]
 name = "atty"
@@ -912,7 +912,7 @@ checksum = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 [[package]]
 name = "sawtooth-sdk-creditcoin"
 version = "0.5.1"
-source = "git+https://github.com/gluwa/Sawtooth-SDK-Rust.git?branch=CRB-42#4dfd2a84485aace2f0cd754efa26ae40b3e80efc"
+source = "git+https://github.com/gluwa/Sawtooth-SDK-Rust.git?branch=dev#8a3d99fa2c82eb3131148931a819ffca46d78c66"
 dependencies = [
  "ctrlc",
  "glob",
