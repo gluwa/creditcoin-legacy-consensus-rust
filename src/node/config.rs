@@ -52,7 +52,13 @@ impl PowConfig {
     block_id: BlockId,
   ) -> Result<Self, Error> {
     let keys = Self::consensus_chain_settings();
-    let settings: HashMap<String, String> = service.get_settings(block_id, keys)?;
+    let settings: HashMap<String, String> = service.get_settings(block_id.clone(), keys)?;
+    if settings.is_empty() {
+      debug!(
+        "No settings found for {:?} at all, using defaults",
+        crate::utils::to_hex(&block_id)
+      );
+    }
     let mut out = Self::default();
 
     #[allow(unused_macros)]
