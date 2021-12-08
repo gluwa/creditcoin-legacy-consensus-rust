@@ -69,13 +69,14 @@ impl PowNode {
     }
   }
 
+  #[allow(clippy::ptr_arg)]
   fn on_block_new_error_handler(
     &mut self,
-    block: Block,
+    block_id: &BlockId,
     error: impl std::error::Error,
   ) -> Result<(), Error> {
-    debug!("Failed consensus check: {} - {:?}", Printer(&block), error);
-    self.service.fail_block(block.block_id)
+    debug!("Failed consensus check: {:?} - {:?}", block_id, error);
+    self.service.fail_block(block_id.to_owned())
   }
 
   /// Called when a new block is received; call for validation or fail the block.
@@ -93,65 +94,20 @@ impl PowNode {
 
     debug!("Checking block consensus: {}", Printer(&block));
 
-    let header = match BlockHeader::borrowed(&block) {
+    match BlockHeader::borrowed(&block) {
       // Ensure the block consensus is valid
       Ok(h) => match h.validate() {
-        Ok(header) => header,
+        Ok(_) => (),
         Err(e) => {
-          self.on_block_new_error_handler(block, e)?;
+          self.on_block_new_error_handler(&block.block_id, e)?;
           return Ok(EventResult::Continue);
         }
       },
       Err(e) => {
-        self.on_block_new_error_handler(block, e)?;
+        self.on_block_new_error_handler(&block.block_id, e)?;
         return Ok(EventResult::Continue);
       }
     };
-
-    // Ensure that the minimum difficulty has been reached.
-
-    // build Predecessor header
-    let pred_header = match self.service.get_block(&block.previous_id) {
-      Ok(block) => match BlockHeader::owned(block.clone()) {
-        Ok(h) => h,
-        Err(e) => {
-          self.on_block_new_error_handler(block, e)?;
-          return Ok(EventResult::Continue);
-        }
-      },
-      Err(e) => {
-        self.on_block_new_error_handler(block, e)?;
-        return Ok(EventResult::Continue);
-      }
-    };
-
-    let config =
-      PowConfig::consensus_settings_view(&mut self.service, pred_header.block_id.clone())?;
-
-    /* */
-    //
-    let expected_min_diff = get_difficulty(
-      &pred_header,
-      header.consensus.timestamp,
-      &mut self.service,
-      &config,
-    );
-
-    if header.consensus.difficulty < expected_min_diff {
-      debug!(
-        "Failed consensus min diff check: curr {:?} - pred {:?}",
-        &header, &pred_header
-      );
-
-      self.service.fail_block(block.block_id)?;
-      return Ok(EventResult::Continue);
-    }
-
-    trace!(
-      "Consensus min diff check: curr {:?} - pred {:?}",
-      &header,
-      &pred_header
-    );
 
     debug!("Passed consensus check: {}", Printer(&block));
     // Request block validation
@@ -162,8 +118,64 @@ impl PowNode {
 
   /// Called when a block check succeeds
   fn on_block_valid(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
+    // Ensure that the minimum difficulty has been reached.
+
+    let block: Block = match self.service.get_block(&block_id) {
+      Ok(block) => block,
+      Err(e) => {
+        self.on_block_new_error_handler(&block_id, e)?;
+        return Ok(EventResult::Continue);
+      }
+    };
+
+    {
+      let header: BlockHeader = block.clone().into();
+
+      // build Predecessor header
+      let pred_header = match self.service.get_block(&header.previous_id) {
+        Ok(block) => match BlockHeader::owned(block.clone()) {
+          Ok(h) => h,
+          Err(e) => {
+            self.on_block_new_error_handler(&block.block_id, e)?;
+            return Ok(EventResult::Continue);
+          }
+        },
+        Err(e) => {
+          self.on_block_new_error_handler(&header.previous_id, e)?;
+          return Ok(EventResult::Continue);
+        }
+      };
+
+      let config =
+        PowConfig::consensus_settings_view(&mut self.service, pred_header.block_id.clone())?;
+
+      let expected_min_diff = get_difficulty(
+        &pred_header,
+        header.consensus.timestamp,
+        &mut self.service,
+        &config,
+      );
+
+      if header.consensus.difficulty < expected_min_diff {
+        debug!(
+          "Failed min-diff: expect {} from curr {:?} with pred {:?}",
+          expected_min_diff, &header, &pred_header
+        );
+
+        self.service.fail_block(header.block_id.clone())?;
+        return Ok(EventResult::Continue);
+      }
+
+      trace!(
+        "Passed min-diff: expect {} from curr {:?} with pred {:?}",
+        expected_min_diff,
+        &header,
+        &pred_header
+      );
+    }
+
     let cur_head: Block = self.service.get_block(&self.state.chain_head)?;
-    let new_head: Block = self.service.get_block(&block_id)?;
+    let new_head: Block = block;
 
     debug!(
       "Choosing between chain heads -- current: {} -- new: {}",
