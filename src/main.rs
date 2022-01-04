@@ -47,7 +47,10 @@ fn setup_logs(verbose_count: u64) -> Result<()> {
 
   Dispatch::new()
     .level(level)
-    .level_for("sawtooth_sdk_creditcoin::messaging::zmq_stream", LevelFilter::Error)
+    .level_for(
+      "sawtooth_sdk_creditcoin::messaging::zmq_stream",
+      LevelFilter::Error,
+    )
     .format(fmt_log)
     .chain(stdout())
     .apply()?;
