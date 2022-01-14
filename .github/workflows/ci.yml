@@ -93,7 +93,7 @@ jobs:
           rm -rf target/
 
       - uses: codecov/codecov-action@v2
-        if: matrix.toolchain == 'nightly'
+        if: ${{ (matrix.toolchain == 'nightly') && (matrix.feature == '') }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ steps.coverage.outputs.report }}
