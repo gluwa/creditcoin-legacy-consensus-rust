@@ -178,10 +178,8 @@ impl PowNode {
   }
 
   /// Called when a block check fails
-  fn on_block_invalid(&mut self, block_id: BlockId) -> Result<EventResult, Error> {
-    // Mark the block as failed by consensus, let the validator know
-    self.service.fail_block(block_id)?;
-
+  /// The block has failed, perform cleanup of consensus' state
+  fn on_block_invalid(&mut self, _block_id: BlockId) -> Result<EventResult, Error> {
     Ok(EventResult::Continue)
   }
 
