@@ -219,6 +219,7 @@ mod tests {
   #[test]
   ///The event loop processed `COUNT_UPDATED` events.
   /// Will fail if run in bulk due to the shared static update event counter.
+  /// use --test-threads 1 instead
   fn singled_out_update_events() {
     let (sx, rx) = channel::<Update>();
     simple_engine_loop!(
