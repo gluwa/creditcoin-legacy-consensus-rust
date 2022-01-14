@@ -119,7 +119,7 @@ impl BlockConsensus {
     match from_utf8(slice.as_ref()) {
       Ok(string) => string
         .parse::<U>()
-        .map_err(|e| ConsensusError::ParsingError(format!("{}:{}", property, e.to_string()))),
+        .map_err(|e| ConsensusError::ParsingError(format!("{}:{}", property, e))),
       Err(e) => Err(ConsensusError::ParsingError(e.to_string())),
     }
   }
