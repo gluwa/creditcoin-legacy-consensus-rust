@@ -99,6 +99,7 @@ jobs:
           files: ${{ steps.coverage.outputs.report }}
           fail_ci_if_error: true
           verbose: true
+          flags: ${{ matrix.feature }}
 
   fmt:
     name: Rustfmt
