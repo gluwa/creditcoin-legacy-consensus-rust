@@ -505,4 +505,28 @@ mod tests {
 
     Ok(())
   }
+
+  #[test]
+  fn if_block_is_invalid_then_continue() -> Result<(), Error> {
+    let state = {
+      let mut state = PowState::new();
+      state.peer_id = (&b"aaaaaaaaaaaaaaaa"[..]).into();
+      state
+    };
+
+    let mut node = PowNode {
+      config: PowConfig::new(),
+      service: PowService::new(Box::new(MockService {})),
+      state,
+      miner: Miner::default(),
+    };
+
+    node.state.guards.insert(Guard::Finalized);
+    let blockid = &b"aaffaaffaaffffff"[..];
+    let res = node.on_block_invalid(blockid.into())?;
+
+    assert_eq!(res, EventResult::Continue);
+
+    Ok(())
+  }
 }
