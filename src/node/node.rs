@@ -271,6 +271,11 @@ impl PowNode {
     let cur_diff_size: u64 = cur_head.block_num.saturating_sub(new_head.block_num);
     let new_diff_size: u64 = new_head.block_num.saturating_sub(cur_head.block_num);
 
+    debug!(
+      "Resolve fork with height ({}/{})",
+      cur_diff_size, new_diff_size,
+    );
+
     // Fetch all blocks from the current chain AFTER the head of the new chain
     // Inverse of `new_chain_orphans`.
     let cur_chain_orphans: Vec<BlockHeader> =
