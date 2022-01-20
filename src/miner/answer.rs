@@ -1,7 +1,7 @@
 use crate::block::{BlockConsensus, SerializedBlockConsensus};
 use crate::miner::Challenge;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Answer {
   pub challenge: Challenge,
   pub nonce: u64,

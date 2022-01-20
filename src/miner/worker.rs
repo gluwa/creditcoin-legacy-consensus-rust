@@ -21,7 +21,7 @@ pub enum MessageToWorker {
   Challenge(Challenge),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MessageToMiner {
   Solved(Answer),
   Started,
@@ -85,7 +85,7 @@ impl Worker {
         MessageToWorker::Shutdown => return,
       };
       debug!("Received challenge: {:?}", challenge);
-      let mut is_first = true;
+      let mut current_difficulty = challenge.difficulty.saturating_sub(1);
 
       loop {
         mkhash_into(
@@ -96,15 +96,14 @@ impl Worker {
           nonce,
         );
         //if solved send the answer, increase diff and continue
-        let (is_valid, solution_diff) = is_valid_proof_of_work(&output, challenge.difficulty);
-        if is_valid && (is_first || solution_diff > challenge.difficulty) {
+        let (_, realized_diffulty) = is_valid_proof_of_work(&output, current_difficulty);
+        if realized_diffulty > current_difficulty {
           debug!("Found nonce: {:?} -> {}", nonce, to_hex(&output));
           channel.send(MessageToMiner::Solved(Answer {
             challenge: challenge.clone(),
             nonce,
           }));
-          is_first = false;
-          challenge.difficulty = solution_diff;
+          current_difficulty = realized_diffulty;
         }
 
         //if updated, send update confirmation.
@@ -114,7 +113,7 @@ impl Worker {
             let challenge_nonce = Worker::start(&channel, update, &mut rng);
             challenge = challenge_nonce.0;
             nonce = challenge_nonce.1;
-            is_first = true;
+            current_difficulty = challenge.difficulty.saturating_sub(1);
           }
           Some(MessageToWorker::Shutdown) => {
             return;

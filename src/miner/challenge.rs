@@ -3,7 +3,7 @@ use crate::node::PeerId;
 use crate::primitives::{CCDifficulty, CCTimestamp};
 use std::fmt::{Debug, Formatter, Result};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Challenge {
   pub difficulty: CCDifficulty,
   pub timestamp: CCTimestamp,
