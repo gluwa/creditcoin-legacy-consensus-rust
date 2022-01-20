@@ -52,13 +52,6 @@ impl UpdateStream {
     }
   }
 
-  /*
-  TODO
-  When new_chainhead:
-    reset timer.
-    if new_chainhead is not ours:
-      try fast-publish. abstract cancel block logic, insert cancel() if fast_publish fails.
-  */
   pub async fn update_loop(mut self) {
     let publishing_flag = self.publishing_flag.clone();
     let time = self.time_til_publishing;
@@ -96,7 +89,6 @@ impl UpdateStream {
           scheduler.set(PublishSchedulerFuture::schedule_publishing(publishing_flag.clone(), time).fuse());
           #[cfg(feature = "test-futures")]
           COUNT_COMMITTER.fetch_add(1usize, Ordering::Relaxed);
-          //force publish TODO?
           committer.set(UpdateStream::toggle_on_reactor(commit_flag.clone()).fuse());
         },
         _ = updater => break,
