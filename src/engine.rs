@@ -44,7 +44,7 @@ impl Engine for PowEngine {
     let rt = PowEngine::build_rt();
 
     {
-      let time_til_publishing = Duration::from_secs(node.config.seconds_between_blocks);
+      let time_til_publishing = Duration::from_millis(500);
       let stream = UpdateStream::new(updates, node, time_til_publishing);
 
       rt.block_on(stream.update_loop());
