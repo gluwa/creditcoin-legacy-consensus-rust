@@ -169,11 +169,12 @@ mod test {
       };
     }
 
-    assert_eq!(consensus.difficulty, challenge.difficulty);
+    assert_eq!(consensus.expected_difficulty, challenge.difficulty);
 
     let hash: H256 = mkhash(&mut get_hasher(), &block_id, &peer_id, consensus.nonce);
 
-    let (is_valid, realized_difficulty) = is_valid_proof_of_work(&hash, consensus.difficulty);
+    let (is_valid, realized_difficulty) =
+      is_valid_proof_of_work(&hash, consensus.expected_difficulty);
     assert!(is_valid);
     assert!(realized_difficulty > challenge.difficulty);
 

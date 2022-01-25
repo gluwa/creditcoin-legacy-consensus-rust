@@ -25,7 +25,7 @@ pub struct BlockConsensus {
   /// Consensus data byte-prefix
   pub tag: ByteTag,
   /// The proof-of-work challenge difficulty
-  pub difficulty: CCDifficulty,
+  pub expected_difficulty: CCDifficulty,
   /// The current server time, in UTC seconds
   pub timestamp: CCTimestamp,
   /// The proof-of-work nonce
@@ -62,7 +62,7 @@ impl BlockConsensus {
     let timestamp: Vec<u8> = Self::read_sequence(&mut reader, GLUE_BYTE)?;
     Ok(Self {
       tag,
-      difficulty: Self::parse_from_utf8("difficulty", &difficulty)?,
+      expected_difficulty: Self::parse_from_utf8("difficulty", &difficulty)?,
       timestamp: Self::parse_from_utf8("timestamp", &timestamp)?,
       nonce: Self::parse_from_utf8("nonce", &nonce)?,
     })
@@ -176,7 +176,7 @@ mod tests {
     let consensus = BlockConsensus::deserialize(consensus).unwrap();
 
     assert_eq!(&consensus.tag, POW_BYTES);
-    assert_eq!(consensus.difficulty, 30);
+    assert_eq!(consensus.expected_difficulty, 30);
     assert_eq!(consensus.nonce, 123);
     assert_eq!(consensus.timestamp, 500.555);
   }

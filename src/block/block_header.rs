@@ -63,14 +63,14 @@ impl<'a> BlockHeader<'a> {
       self.consensus.nonce,
     );
 
-    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.difficulty);
+    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.expected_difficulty);
 
     if is_valid {
       Ok(difficulty)
     } else {
       Err(ConsensusError::InvalidHash(format!(
         "({} / diff:{})",
-        difficulty, self.consensus.difficulty
+        difficulty, self.consensus.expected_difficulty
       )))
     }
   }
