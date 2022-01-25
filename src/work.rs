@@ -66,7 +66,7 @@ fn calculate_difficulty(
   } else if is_adjustment_block(header, config) {
     calculate_adjustment_difficulty(header, timestamp, service, config)
   } else {
-    Ok(header.consensus.difficulty)
+    Ok(header.consensus.expected_difficulty)
   }
 }
 
@@ -84,7 +84,7 @@ fn calculate_tuning_difficulty(
     config.seconds_between_blocks,
   )?;
 
-  let difficulty: u32 = header.consensus.difficulty;
+  let difficulty: u32 = header.consensus.expected_difficulty;
 
   if time_taken < time_expected && difficulty < 255 {
     Ok(difficulty + 1)
@@ -109,7 +109,7 @@ fn calculate_adjustment_difficulty(
     config.seconds_between_blocks,
   )?;
 
-  let difficulty: u32 = header.consensus.difficulty;
+  let difficulty: u32 = header.consensus.expected_difficulty;
 
   if time_taken < time_expected / 2.0 && difficulty < 255 {
     Ok(difficulty + 1)
