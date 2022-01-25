@@ -20,7 +20,7 @@ test-futures = []
 anyhow = "1.0.52"
 byteorder = "1.3.4"
 chrono = "0.4.11"
-clap = "2.34.0"
+clap = "3.0.12"
 crossbeam-channel = "0.5.2"
 fern = { version = "0.6.0", features = ["colored"] }
 log = "0.4.8"
