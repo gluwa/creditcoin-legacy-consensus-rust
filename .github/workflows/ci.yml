@@ -93,13 +93,12 @@ jobs:
           rm -rf target/
 
       - uses: codecov/codecov-action@v2
-        if: ${{ (matrix.toolchain == 'nightly') && (matrix.feature == '') }}
+        if: matrix.toolchain == 'nightly'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ steps.coverage.outputs.report }}
           fail_ci_if_error: true
           verbose: true
-          flags: ${{ matrix.feature }}
 
   fmt:
     name: Rustfmt
