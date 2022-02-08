@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::Deref;
 
 use crate::block::{Block, BlockConsensus, ConsensusError};
-use crate::primitives::H256;
+use crate::primitives::{CCDifficulty, H256};
 use crate::work::get_hasher;
 use crate::work::{is_valid_proof_of_work, mkhash};
 
@@ -36,7 +36,11 @@ impl<'a> BlockHeader<'a> {
   }
 
   pub fn work(&self) -> u64 {
-    2u64.pow(self.consensus.difficulty)
+    let actual_difficulty = self
+      .validate_proof_of_work()
+      .expect("Validity was previously attested when creating the BlockHeader");
+
+    2u64.pow(actual_difficulty)
   }
 
   pub fn validate(self) -> Result<Self, ConsensusError> {
@@ -46,12 +50,12 @@ impl<'a> BlockHeader<'a> {
     }
 
     // The block must pass the difficulty filter
-    self.validate_proof_of_work()?;
+    let _ = self.validate_proof_of_work()?;
 
     Ok(self)
   }
 
-  fn validate_proof_of_work(&self) -> Result<(), ConsensusError> {
+  fn validate_proof_of_work(&self) -> Result<CCDifficulty, ConsensusError> {
     let hash: H256 = mkhash(
       &mut get_hasher(),
       &self.previous_id,
@@ -59,14 +63,14 @@ impl<'a> BlockHeader<'a> {
       self.consensus.nonce,
     );
 
-    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.difficulty);
+    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.expected_difficulty);
 
     if is_valid {
-      Ok(())
+      Ok(difficulty)
     } else {
       Err(ConsensusError::InvalidHash(format!(
         "({} / diff:{})",
-        difficulty, self.consensus.difficulty
+        difficulty, self.consensus.expected_difficulty
       )))
     }
   }

@@ -137,7 +137,7 @@ impl PowNode {
       &config,
     );
 
-    if header.consensus.difficulty < expected_min_diff {
+    if header.consensus.expected_difficulty < expected_min_diff {
       debug!(
         "Failed consensus min diff check: curr {:?} - pred {:?}",
         &header, &pred_header

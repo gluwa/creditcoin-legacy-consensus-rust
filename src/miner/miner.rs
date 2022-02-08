@@ -81,7 +81,10 @@ impl Debug for Miner {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::block::SerializedBlockConsensus;
+  use crate::block::{BlockConsensus, SerializedBlockConsensus};
+  use crate::primitives::H256;
+  use crate::work::{get_hasher, is_valid_proof_of_work, mkhash};
+
   #[test]
   fn default_miner() {
     let m = Miner::default();
@@ -137,5 +140,58 @@ mod test {
     }
 
     Ok(())
+  }
+  #[test]
+  ///The worker should return a challenge with expected difficulty not realized difficulty.
+  fn worker_returns_challenge_with_expected_difficulty() -> Result<(), String> {
+    let miner = Miner::default();
+    let block_id: Vec<u8> = b"1111111111111111".iter().copied().collect();
+    let peer_id: Vec<u8> = b"1111111111111111".iter().copied().collect();
+
+    let timestamp: f64 = utc_seconds_f64();
+
+    let challenge: Challenge = Challenge {
+      difficulty: 2,
+      timestamp,
+      block_id: block_id.clone(),
+      peer_id: peer_id.clone(),
+    };
+
+    miner.worker.send(challenge.clone());
+    while None == miner.try_create_consensus() {}
+
+    let consensus: BlockConsensus;
+    //the second answer if any is guaranteed to be higher than the expected difficulty but the expected diff should stay the same
+    loop {
+      if let Some(new) = miner.try_create_consensus() {
+        consensus = BlockConsensus::deserialize(new.as_slice()).unwrap();
+        break;
+      };
+    }
+
+    assert_eq!(consensus.expected_difficulty, challenge.difficulty);
+
+    let hash: H256 = mkhash(&mut get_hasher(), &block_id, &peer_id, consensus.nonce);
+
+    let (is_valid, realized_difficulty) =
+      is_valid_proof_of_work(&hash, consensus.expected_difficulty);
+    assert!(is_valid);
+    assert!(realized_difficulty > challenge.difficulty);
+
+    //a new challenge should reset the current difficulty in the worker
+    miner.worker.send(challenge.clone());
+
+    while Some(MessageToMiner::Started) != miner.worker.try_recv() {}
+
+    std::thread::sleep(std::time::Duration::from_millis(250));
+
+    if let MessageToMiner::Solved(ans) = miner.worker.try_recv().unwrap() {
+      let hash: H256 = mkhash(&mut get_hasher(), &block_id, &peer_id, ans.nonce);
+      let (_, new_realized_difficulty) = is_valid_proof_of_work(&hash, ans.challenge.difficulty);
+      assert!(realized_difficulty > new_realized_difficulty);
+      Ok(())
+    } else {
+      Err("No answer received".into())
+    }
   }
 }
