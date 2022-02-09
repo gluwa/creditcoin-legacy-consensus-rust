@@ -10,7 +10,7 @@ pub struct Answer {
 impl From<&Answer> for SerializedBlockConsensus {
   fn from(answer: &Answer) -> Self {
     BlockConsensus::serialize(
-      answer.challenge.difficulty,
+      answer.challenge.next_difficulty,
       answer.challenge.timestamp,
       answer.nonce,
     )

@@ -25,6 +25,7 @@ pub struct BlockConsensus {
   /// Consensus data byte-prefix
   pub tag: ByteTag,
   /// The proof-of-work challenge difficulty
+  /// holds the next's block expected difficulty, will serve as next block's minimum difficulty
   pub expected_difficulty: CCDifficulty,
   /// The current server time, in UTC seconds
   pub timestamp: CCTimestamp,
