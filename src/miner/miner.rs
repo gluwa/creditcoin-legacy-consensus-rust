@@ -47,16 +47,22 @@ impl Miner {
     config: &PowConfig,
   ) -> Result<(), Error> {
     let block: Block = service.get_block(&block_id)?;
-    let header: BlockHeader = BlockHeader::borrowed(&block).expect("Chain head Header");
+    let header = BlockHeader::borrowed(&block).expect("Chain head Header");
 
     let timestamp: f64 = utc_seconds_f64();
-    let difficulty: u32 = get_difficulty(&header, timestamp, service, config);
+    let difficulty = if header.consensus.is_pow() {
+      header.consensus.expected_difficulty
+    } else {
+      config.initial_difficulty
+    };
+    let next_difficulty: u32 = get_difficulty(&header, timestamp, service, config);
 
     let challenge: Challenge = Challenge {
       difficulty,
       timestamp,
       block_id,
       peer_id,
+      next_difficulty,
     };
 
     self.worker.send(challenge);
@@ -103,6 +109,7 @@ mod test {
 
     let challenge: Challenge = Challenge {
       difficulty: 12,
+      next_difficulty: 0,
       timestamp,
       block_id,
       peer_id,
@@ -142,7 +149,7 @@ mod test {
     Ok(())
   }
   #[test]
-  ///The worker should return a challenge with expected difficulty not realized difficulty.
+  ///The worker should return a challenge with the next's block expected difficulty.
   fn worker_returns_challenge_with_expected_difficulty() -> Result<(), String> {
     let miner = Miner::default();
     let block_id: Vec<u8> = b"1111111111111111".iter().copied().collect();
@@ -152,6 +159,8 @@ mod test {
 
     let challenge: Challenge = Challenge {
       difficulty: 2,
+      // doesnt matter how high it is, this block won't use it, that's next block's problem.
+      next_difficulty: 100,
       timestamp,
       block_id: block_id.clone(),
       peer_id: peer_id.clone(),
@@ -169,12 +178,13 @@ mod test {
       };
     }
 
-    assert_eq!(consensus.expected_difficulty, challenge.difficulty);
+    assert_eq!(consensus.expected_difficulty, challenge.next_difficulty);
 
     let hash: H256 = mkhash(&mut get_hasher(), &block_id, &peer_id, consensus.nonce);
 
     let (is_valid, realized_difficulty) =
-      is_valid_proof_of_work(&hash, consensus.expected_difficulty);
+    //this block's expected difficulty is on the predecessor, in this case, the same challenge's value.
+      is_valid_proof_of_work(&hash, challenge.difficulty);
     assert!(is_valid);
     assert!(realized_difficulty > challenge.difficulty);
 
@@ -193,5 +203,31 @@ mod test {
     } else {
       Err("No answer received".into())
     }
+  }
+
+  use crate::node::tests::MockService;
+
+  #[test]
+  //first pow block will pull difficulty from a default blockheader.
+  // The difficulty mined should be the on-chain initial difficulty.
+  fn first_pow_block_difficulty() -> Result<(), Error> {
+    let config = PowConfig::new();
+    let mut service = PowService::new(Box::new(MockService {}));
+    let mut miner = Miner::default();
+    let block_id = b"1111111111111111".iter().copied().collect();
+    let peer_id = b"2222222222222222".iter().copied().collect();
+    miner.mine(block_id, peer_id, &mut service, &config)?;
+    loop {
+      match miner.worker.try_recv() {
+        Some(MessageToMiner::Solved(ans)) => {
+          // first block's difficulty should be pulled from config
+          assert_eq!(ans.challenge.difficulty, config.initial_difficulty);
+          break;
+        }
+        _ => {}
+      }
+    }
+
+    Ok(())
   }
 }

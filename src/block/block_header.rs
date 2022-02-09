@@ -37,25 +37,30 @@ impl<'a> BlockHeader<'a> {
 
   pub fn work(&self) -> u64 {
     let actual_difficulty = self
-      .validate_proof_of_work()
+      //we don't want to validate difficulty, we want the actual_difficulty, use the minimum input value so that the method never fails
+      .validate_proof_of_work(0)
       .expect("Validity was previously attested when creating the BlockHeader");
 
     2u64.pow(actual_difficulty)
   }
 
-  pub fn validate(self) -> Result<Self, ConsensusError> {
+  //Validate that the solution has a difficulty greater orequal than the minimum difficulty (now stored in the predecessor)
+  pub fn validate(self, minimum_difficulty: CCDifficulty) -> Result<Self, ConsensusError> {
     // The genesis block is always valid
     if self.is_genesis() {
       return Ok(self);
     }
 
-    // The block must pass the difficulty filter
-    let _ = self.validate_proof_of_work()?;
+    let _ = self.validate_proof_of_work(minimum_difficulty)?;
 
     Ok(self)
   }
 
-  fn validate_proof_of_work(&self) -> Result<CCDifficulty, ConsensusError> {
+  // is valid proof of work using the consensus difficulty field
+  fn validate_proof_of_work(
+    &self,
+    difficulty: CCDifficulty,
+  ) -> Result<CCDifficulty, ConsensusError> {
     let hash: H256 = mkhash(
       &mut get_hasher(),
       &self.previous_id,
@@ -63,14 +68,14 @@ impl<'a> BlockHeader<'a> {
       self.consensus.nonce,
     );
 
-    let (is_valid, difficulty) = is_valid_proof_of_work(&hash, self.consensus.expected_difficulty);
+    let (is_valid, actual_difficulty) = is_valid_proof_of_work(&hash, difficulty);
 
     if is_valid {
       Ok(difficulty)
     } else {
       Err(ConsensusError::InvalidHash(format!(
-        "({} / diff:{})",
-        difficulty, self.consensus.expected_difficulty
+        "(Expected {}, got {})",
+        difficulty, actual_difficulty
       )))
     }
   }
