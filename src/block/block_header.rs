@@ -123,3 +123,43 @@ impl Display for BlockHeader<'_> {
     )
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::block::Block;
+
+  use crate::miner::Miner;
+  use crate::node::tests::MockService;
+  use crate::node::{PowConfig, PowService};
+
+  #[test]
+  ///Validate proof of work could mistakenly return the expected difficulty instead of the actual difficulty.
+  fn validate_proof_of_work_returns_actual_diff() {
+    let mut miner = Miner::default();
+    let mut service = PowService::new(Box::new(MockService {}));
+    let mut config = PowConfig::new();
+    let mut b = Block::default();
+
+    {
+      config.initial_difficulty = 7;
+      let block_id = b"1111111111111111".iter().copied().collect();
+      let peer_id = b"2222222222222222".iter().copied().collect();
+      miner
+        .mine(block_id, peer_id, &mut service, &config)
+        .unwrap();
+    }
+
+    loop {
+      if let Some(c) = miner.try_create_consensus() {
+        b.payload = c;
+        break;
+      }
+    }
+
+    let block_header = BlockHeader::borrowed(&b).expect("test-block");
+    let exp_diff = 0;
+    let actual_diff = block_header.validate_proof_of_work(exp_diff).unwrap();
+    assert_ne!(actual_diff, exp_diff);
+  }
+}
