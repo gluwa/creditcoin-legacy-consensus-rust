@@ -71,7 +71,7 @@ impl<'a> BlockHeader<'a> {
     let (is_valid, actual_difficulty) = is_valid_proof_of_work(&hash, difficulty);
 
     if is_valid {
-      Ok(difficulty)
+      Ok(actual_difficulty)
     } else {
       Err(ConsensusError::InvalidHash(format!(
         "(Expected {}, got {})",
