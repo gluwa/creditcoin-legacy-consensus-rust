@@ -218,13 +218,10 @@ mod test {
     let peer_id = b"2222222222222222".iter().copied().collect();
     miner.mine(block_id, peer_id, &mut service, &config)?;
     loop {
-      match miner.worker.try_recv() {
-        Some(MessageToMiner::Solved(ans)) => {
-          // first block's difficulty should be pulled from config
-          assert_eq!(ans.challenge.difficulty, config.initial_difficulty);
-          break;
-        }
-        _ => {}
+      if let Some(MessageToMiner::Solved(ans)) = miner.worker.try_recv() {
+        // first block's difficulty should be pulled from config
+        assert_eq!(ans.challenge.difficulty, config.initial_difficulty);
+        break;
       }
     }
 
