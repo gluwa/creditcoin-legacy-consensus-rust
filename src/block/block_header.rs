@@ -44,14 +44,14 @@ impl<'a> BlockHeader<'a> {
     2u64.pow(actual_difficulty)
   }
 
-  //Validate that the solution has a difficulty greater orequal than the minimum difficulty (now stored in the predecessor)
-  pub fn validate(self, minimum_difficulty: CCDifficulty) -> Result<Self, ConsensusError> {
+  //Validate that the solution has a difficulty greater or equal than the minimum difficulty (now stored in the predecessor)
+  pub fn validate(self, _minimum_difficulty: CCDifficulty) -> Result<Self, ConsensusError> {
     // The genesis block is always valid
     if self.is_genesis() {
       return Ok(self);
     }
 
-    let _ = self.validate_proof_of_work(minimum_difficulty)?;
+    warn!("Bypassing proof of work validation");
 
     Ok(self)
   }
