@@ -50,11 +50,9 @@ impl Miner {
     let header = BlockHeader::borrowed(&block).expect("Chain head Header");
 
     let timestamp: f64 = utc_seconds_f64();
-    let difficulty = if header.consensus.is_pow() {
-      header.consensus.expected_difficulty
-    } else {
-      config.initial_difficulty
-    };
+    let difficulty = 19;
+    warn!("Mining low difficulty: {}", difficulty);
+
     let next_difficulty: u32 = get_difficulty(&header, timestamp, service, config);
 
     let challenge: Challenge = Challenge {
