@@ -29,7 +29,7 @@ rand = "0.8.4"
 sawtooth-sdk = { package = "sawtooth-sdk-creditcoin", version = "0.5.1", git = "https://github.com/gluwa/Sawtooth-SDK-Rust.git", branch = "dev" }
 sha2 = "0.10.2"
 futures = "0.3.19"
-tokio = { version = "1.16.1", features = ["full"] }
+tokio = { version = "1.17.0", features = ["full"] }
 
 [dev-dependencies]
 mockall = "*"
