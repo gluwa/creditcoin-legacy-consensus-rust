@@ -101,30 +101,7 @@ impl PowNode {
       }
     };
 
-    let expected_min_diff = {
-      let pred_header = match self.service.get_block(&header.previous_id) {
-        Ok(block) => match BlockHeader::owned(block.clone()) {
-          Ok(h) => h,
-          Err(e) => {
-            self.on_block_new_error_handler(&block.block_id, e)?;
-            return Ok(EventResult::Continue);
-          }
-        },
-        Err(e) => {
-          self.on_block_new_error_handler(&header.previous_id, e)?;
-          return Ok(EventResult::Continue);
-        }
-      };
-
-      trace!(
-        "Consensus min diff check: curr {:?} - pred {:?}",
-        &header,
-        &pred_header
-      );
-
-      pred_header.consensus.expected_difficulty
-    };
-
+    let expected_min_diff = header.consensus.expected_difficulty;
     // Ensure that the minimum difficulty has been reached.
     // The block must pass the difficulty filter, use the lagged difficulty stored in the predecessor.
     match header.validate(expected_min_diff) {
