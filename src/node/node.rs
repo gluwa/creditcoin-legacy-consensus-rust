@@ -199,12 +199,6 @@ impl PowNode {
     self.state.guards.clear();
 
     // Start the PoW process for this block
-    self.miner.mine(
-      block_id.clone(),
-      self.state.peer_id.clone(),
-      &mut self.service,
-      &self.config,
-    )?;
 
     // Initialize a new block based on the updated chain head
     self.service.initialize_block(Some(block_id))?;
@@ -441,12 +435,6 @@ impl PowNode {
       self.reload_configuration()?;
 
       // Start the inital PoW process with the current chain head
-      self.miner.mine(
-        self.state.chain_head.clone(),
-        self.state.peer_id.clone(),
-        &mut self.service,
-        &self.config,
-      )?;
 
       // Initialize a new block based on the current chain head
       self.service.initialize_block(None)?;
