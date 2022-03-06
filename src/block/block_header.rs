@@ -36,15 +36,13 @@ impl<'a> BlockHeader<'a> {
   }
 
   pub fn work(&self) -> u64 {
-    let actual_difficulty = self
-      //we don't want to validate difficulty, we want the actual_difficulty, use the minimum input value so that the method never fails
-      .validate_proof_of_work(0)
-      .expect("Validity was previously attested when creating the BlockHeader");
+    //use the stored diff as actual diff. should work for CC1.7 if expected_diff eq actual_diff.
+    let actual_difficulty = self.consensus.expected_difficulty;
 
     2u64.pow(actual_difficulty)
   }
 
-  //Validate that the solution has a difficulty greater orequal than the minimum difficulty (now stored in the predecessor)
+  //Validate that the solution has a difficulty greater or equal than the minimum difficulty (now stored in the predecessor)
   pub fn validate(self, minimum_difficulty: CCDifficulty) -> Result<Self, ConsensusError> {
     // The genesis block is always valid
     if self.is_genesis() {
