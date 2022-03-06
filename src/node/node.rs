@@ -107,8 +107,11 @@ impl PowNode {
     match header.validate(expected_min_diff) {
       Ok(_) => (),
       Err(e) => {
-        self.on_block_new_error_handler(&block.block_id, e)?;
-        return Ok(EventResult::Continue);
+        debug!(
+          "Failed(bypassed) consensus check: {} - {:?}",
+          to_hex(&block.block_id),
+          e
+        );
       }
     }
 
