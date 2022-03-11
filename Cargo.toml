@@ -17,7 +17,7 @@ test-futures = []
 
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.56"
 byteorder = "1.3.4"
 chrono = "0.4.11"
 clap = "2.34.0"
@@ -27,7 +27,7 @@ log = "0.4.8"
 rand = "0.8.4"
 #TODO: update package
 sawtooth-sdk = { package = "sawtooth-sdk-creditcoin", version = "0.5.1", git = "https://github.com/gluwa/Sawtooth-SDK-Rust.git", branch = "dev" }
-sha2 = "0.10.1"
+sha2 = "0.10.2"
 futures = "0.3.19"
 tokio = { version = "1.16.1", features = ["full"] }
 
