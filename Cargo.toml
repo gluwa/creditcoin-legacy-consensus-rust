@@ -23,7 +23,7 @@ chrono = "0.4.11"
 clap = "2.34.0"
 crossbeam-channel = "0.5.2"
 fern = { version = "0.6.0", features = ["colored"] }
-log = "0.4.8"
+log = "0.4.16"
 rand = "0.8.4"
 #TODO: update package
 sawtooth-sdk = { package = "sawtooth-sdk-creditcoin", version = "0.5.1", git = "https://github.com/gluwa/Sawtooth-SDK-Rust.git", branch = "dev" }
